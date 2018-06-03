@@ -65,6 +65,8 @@
 #include "synaptics_dsx_core.h"
 #include <linux/oneplus/boot_mode.h>
 
+#include <linux/moduleparam.h>
+
 #define WAKE_GESTURES 		1
 #ifdef WAKE_GESTURES
 #define WAKE_GESTURE		0x0b
@@ -211,6 +213,10 @@ int Sgestrue_gesture =0;//"(S)"
 int Single_gesture = 0; //"(SingleTap)"
 int Enable_gesture =0;
 static int gesture_switch = 0;
+
+bool haptic_feedback_disable = false;
+module_param(haptic_feedback_disable, bool, 0644);
+
 #endif
 
 /*********************for Debug LOG switch*******************/
@@ -268,6 +274,7 @@ static struct workqueue_struct *synaptics_report = NULL;
 static struct workqueue_struct *get_base_report = NULL;
 static struct proc_dir_entry *prEntry_tp = NULL;
 
+void qpnp_hap_ignore_next_request(void);
 
 #ifdef SUPPORT_GESTURE
 static uint32_t clockwise;
@@ -1603,11 +1610,15 @@ static void gesture_judge(struct synaptics_ts_data *ts)
 
 		//traditional s2w using userspace doubletap gesture from OnePlus (checks proximity sensor and vibrates)
 		} else if (DouTap_gesture) {
+
 			gesture_upload = DouTap;
 			input_report_key(ts->input_dev, keyCode, 1);
 			input_sync(ts->input_dev);
 			input_report_key(ts->input_dev, keyCode, 0);
 			input_sync(ts->input_dev);
+
+			if (haptic_feedback_disable)
+				qpnp_hap_ignore_next_request();
 
 		//traditional s2w if gestures not enabled in OnePlus settings (only turns on screen)
 		} else {
@@ -1633,6 +1644,10 @@ static void gesture_judge(struct synaptics_ts_data *ts)
 		input_sync(ts->input_dev);
 		input_report_key(ts->input_dev, keyCode, 0);
 		input_sync(ts->input_dev);
+
+		if (haptic_feedback_disable)
+			qpnp_hap_ignore_next_request();
+
 	}else{
 		mutex_lock(&ts->mutex);
 		ret = i2c_smbus_read_i2c_block_data( ts->client, F12_2D_CTRL20, 3, &(reportbuf[0x0]) );
