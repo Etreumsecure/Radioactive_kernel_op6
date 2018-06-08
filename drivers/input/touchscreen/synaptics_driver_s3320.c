@@ -215,6 +215,11 @@ int Enable_gesture =0;
 static int gesture_switch = 0;
 #endif
 
+bool haptic_feedback_disable = false;
+module_param(haptic_feedback_disable, bool, 0644);
+
+void qpnp_hap_ignore_next_request(void);
+
 /*********************for Debug LOG switch*******************/
 #define TPD_ERR(a, arg...)  pr_err(TPD_DEVICE ": " a, ##arg)
 #define TPDTM_DMESG(a, arg...)  printk(TPD_DEVICE ": " a, ##arg)
@@ -1300,7 +1305,7 @@ static void fp_detect(struct synaptics_ts_data *ts)
 		set_tp_info(ts, 0);
 		if (ts->fp_aod_cnt > 0)
 			need_reset = 1;
-		not_getbase = 0;
+			not_getbase = 0;
 		ts->fp_aod_cnt = 0;
 		break;
 	}
@@ -1638,6 +1643,9 @@ static void gesture_judge(struct synaptics_ts_data *ts)
 		input_sync(ts->input_dev);
 		input_report_key(ts->input_dev, keyCode, 0);
 		input_sync(ts->input_dev);
+
+		if (haptic_feedback_disable)
+			qpnp_hap_ignore_next_request();
 	}else{
 		mutex_lock(&ts->mutex);
 		ret = i2c_smbus_read_i2c_block_data( ts->client, F12_2D_CTRL20, 3, &(reportbuf[0x0]) );
@@ -2324,7 +2332,7 @@ static ssize_t synap_write_address(struct file *file, const char __user *buffer,
     }
     else
         block = temp_block;
-    return count;
+	return count;
 }
 
 #ifdef SUPPORT_GLOVES_MODE
