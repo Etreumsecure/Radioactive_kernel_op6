@@ -12,7 +12,7 @@ txtrst=$(tput sgr0)             # reset
 blink=$(tput blink)             # blink
 
 KERNEL_NAME="~Radioactive"
-INCREMENTAL_VERSION="V1.1.0-custom"
+INCREMENTAL_VERSION="V1.1.5-custom"
 export LOCALVERSION="${KERNEL_NAME}-${INCREMENTAL_VERSION}"
 export KBUILD_BUILD_USER=acuicultor
 export KBUILD_BUILD_HOST=NuclearPowerPlant
