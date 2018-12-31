@@ -265,7 +265,7 @@ int update_devfreq(struct devfreq *devfreq)
 		return -EINVAL;
 
 	/* Reevaluate the proper frequency */
-	err = devfreq->governor->get_target_freq(devfreq, &freq);
+	err = devfreq->governor->get_target_freq(devfreq, &freq, &flags);
 	if (err)
 		return err;
 
@@ -959,6 +959,14 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 
 	ret = sscanf(buf, "%" __stringify(DEVFREQ_NAME_LEN) "s", str_governor);
 	if (ret != 1)
+		return -EINVAL;
+
+	/* Governor white list */
+	if (strncmp(str_governor, "simple_ondemand", DEVFREQ_NAME_LEN) &&
+		strncmp(str_governor, "cpufreq", DEVFREQ_NAME_LEN) &&
+		strncmp(str_governor, "performance", DEVFREQ_NAME_LEN) &&
+		strncmp(str_governor, "powersave", DEVFREQ_NAME_LEN) &&
+		strncmp(str_governor, "msm-adreno-tz", DEVFREQ_NAME_LEN))
 		return -EINVAL;
 
 	mutex_lock(&devfreq_list_lock);
