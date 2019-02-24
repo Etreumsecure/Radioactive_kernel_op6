@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -227,6 +227,47 @@ static void usb_hif_free_pipe_resources(struct HIF_USB_PIPE *pipe)
 
 }
 
+#ifdef QCN7605_SUPPORT
+/**
+ * usb_hif_get_logical_pipe_num() - get pipe number for a particular enpoint
+ * @device: pointer to HIF_DEVICE_USB structure
+ * @ep_address: endpoint address
+ * @urb_count: number of urb resources to be allocated to the pipe
+ *
+ * Return: uint8_t pipe number corresponding to ep_address
+ */
+static uint8_t usb_hif_get_logical_pipe_num(struct HIF_DEVICE_USB *device,
+					    uint8_t ep_address,
+					    int *urb_count)
+{
+	uint8_t pipe_num = HIF_USB_PIPE_INVALID;
+
+	switch (ep_address) {
+	case USB_EP_ADDR_APP_CTRL_IN:
+		pipe_num = HIF_RX_CTRL_PIPE;
+		*urb_count = RX_URB_COUNT;
+		break;
+	case USB_EP_ADDR_APP_DATA_IN:
+		pipe_num = HIF_RX_DATA_PIPE;
+		*urb_count = RX_URB_COUNT;
+		break;
+		break;
+	case USB_EP_ADDR_APP_CTRL_OUT:
+		pipe_num = HIF_TX_CTRL_PIPE;
+		*urb_count = TX_URB_COUNT;
+		break;
+	case USB_EP_ADDR_APP_DATA_OUT:
+		pipe_num = HIF_TX_DATA_LP_PIPE;
+		*urb_count = TX_URB_COUNT;
+		break;
+	default:
+		/* note: there may be endpoints not currently used */
+		break;
+	}
+
+	return pipe_num;
+}
+#else
 /**
  * usb_hif_get_logical_pipe_num() - get pipe number for a particular enpoint
  * @device: pointer to HIF_DEVICE_USB structure
@@ -236,7 +277,7 @@ static void usb_hif_free_pipe_resources(struct HIF_USB_PIPE *pipe)
  * Return: uint8_t pipe number corresponding to ep_address
  */
 static uint8_t usb_hif_get_logical_pipe_num
-					(HIF_DEVICE_USB *device,
+					(struct HIF_DEVICE_USB *device,
 					uint8_t ep_address,
 					int *urb_count)
 {
@@ -282,6 +323,7 @@ static uint8_t usb_hif_get_logical_pipe_num
 
 	return pipe_num;
 }
+#endif /* QCN7605_SUPPORT */
 
 /**
  * usb_hif_get_logical_pipe_num() - setup urb resources for all pipes
@@ -289,7 +331,7 @@ static uint8_t usb_hif_get_logical_pipe_num
  *
  * Return: QDF_STATUS_SUCCESS if success else an appropriate QDF_STATUS error
  */
-QDF_STATUS usb_hif_setup_pipe_resources(HIF_DEVICE_USB *device)
+QDF_STATUS usb_hif_setup_pipe_resources(struct HIF_DEVICE_USB *device)
 {
 	struct usb_interface *interface = device->interface;
 	struct usb_host_interface *iface_desc = interface->cur_altsetting;
@@ -400,7 +442,7 @@ QDF_STATUS usb_hif_setup_pipe_resources(HIF_DEVICE_USB *device)
  *
  * Return: none
  */
-void usb_hif_cleanup_pipe_resources(HIF_DEVICE_USB *device)
+void usb_hif_cleanup_pipe_resources(struct HIF_DEVICE_USB *device)
 {
 	int i;
 
@@ -444,7 +486,7 @@ static void usb_hif_flush_pending_transfers(struct HIF_USB_PIPE *pipe)
  *
  * Return: none
  */
-void usb_hif_flush_all(HIF_DEVICE_USB *device)
+void usb_hif_flush_all(struct HIF_DEVICE_USB *device)
 {
 	int i;
 	struct HIF_USB_PIPE *pipe;
@@ -1002,17 +1044,24 @@ static void usb_hif_post_recv_bundle_transfers(struct HIF_USB_PIPE *recv_pipe,
  *
  * Return: none
  */
-void usb_hif_prestart_recv_pipes(HIF_DEVICE_USB *device)
+void usb_hif_prestart_recv_pipes(struct HIF_DEVICE_USB *device)
 {
-	struct HIF_USB_PIPE *pipe = &device->pipes[HIF_RX_DATA_PIPE];
+	struct HIF_USB_PIPE *pipe;
+	int prestart_cnt = 8;
 
+	if (device->rx_ctrl_pipe_supported) {
+		pipe = &device->pipes[HIF_RX_CTRL_PIPE];
+		prestart_cnt = 4;
+		usb_hif_post_recv_prestart_transfers(pipe, prestart_cnt);
+	}
 	/*
 	 * USB driver learn to support bundle or not until the firmware
 	 * download and ready. Only allocate some URBs for control message
 	 * communication during the initial phase then start the final
 	 * working pipe after all information understood.
 	 */
-	usb_hif_post_recv_prestart_transfers(pipe, 8);
+	pipe = &device->pipes[HIF_RX_DATA_PIPE];
+	usb_hif_post_recv_prestart_transfers(pipe, prestart_cnt);
 }
 
 /**
@@ -1023,7 +1072,7 @@ void usb_hif_prestart_recv_pipes(HIF_DEVICE_USB *device)
  *
  * Return: none
  */
-void usb_hif_start_recv_pipes(HIF_DEVICE_USB *device)
+void usb_hif_start_recv_pipes(struct HIF_DEVICE_USB *device)
 {
 	struct HIF_USB_PIPE *pipe;
 	uint32_t buf_len;
@@ -1053,6 +1102,14 @@ void usb_hif_start_recv_pipes(HIF_DEVICE_USB *device)
 		usb_hif_post_recv_transfers(pipe, HIF_USB_RX_BUFFER_SIZE);
 	}
 
+	if (device->rx_ctrl_pipe_supported) {
+		HIF_TRACE("Post URBs to RX_CONTROL_PIPE: %d",
+			  device->pipes[HIF_RX_CTRL_PIPE].urb_cnt);
+
+		pipe = &device->pipes[HIF_RX_CTRL_PIPE];
+		pipe->urb_cnt_thresh = pipe->urb_alloc / 2;
+		usb_hif_post_recv_transfers(pipe, HIF_USB_RX_BUFFER_SIZE);
+	}
 	HIF_EXIT();
 }
 
@@ -1067,12 +1124,9 @@ void usb_hif_start_recv_pipes(HIF_DEVICE_USB *device)
  *
  * Return: QDF_STATUS_SUCCESS if success else an appropriate QDF_STATUS error
  */
-QDF_STATUS usb_hif_submit_ctrl_out(HIF_DEVICE_USB *device,
-						uint8_t req,
-						uint16_t value,
-						uint16_t index,
-						void *data,
-						uint32_t size)
+QDF_STATUS usb_hif_submit_ctrl_out(struct HIF_DEVICE_USB *device,
+				   uint8_t req, uint16_t value, uint16_t index,
+				   void *data, uint32_t size)
 {
 	int32_t result = 0;
 	QDF_STATUS ret = QDF_STATUS_SUCCESS;
@@ -1123,12 +1177,9 @@ QDF_STATUS usb_hif_submit_ctrl_out(HIF_DEVICE_USB *device,
  *
  * Return: QDF_STATUS_SUCCESS if success else an appropriate QDF_STATUS error
  */
-QDF_STATUS usb_hif_submit_ctrl_in(HIF_DEVICE_USB *device,
-						uint8_t req,
-						uint16_t value,
-						uint16_t index,
-						void *data,
-						uint32_t size)
+QDF_STATUS usb_hif_submit_ctrl_in(struct HIF_DEVICE_USB *device,
+				  uint8_t req, uint16_t value, uint16_t index,
+				  void *data, uint32_t size)
 {
 	int32_t result = 0;
 	QDF_STATUS ret = QDF_STATUS_SUCCESS;
@@ -1176,10 +1227,10 @@ QDF_STATUS usb_hif_submit_ctrl_in(HIF_DEVICE_USB *device,
  *
  * Return: none
  */
-void usb_hif_io_complete(struct HIF_USB_PIPE *pipe)
+static void usb_hif_io_complete(struct HIF_USB_PIPE *pipe)
 {
 	qdf_nbuf_t buf;
-	HIF_DEVICE_USB *device;
+	struct HIF_DEVICE_USB *device;
 	HTC_FRAME_HDR *HtcHdr;
 	uint8_t *data;
 	uint32_t len;
