@@ -43,7 +43,7 @@
 #include "lim_sme_req_utils.h"
 
 /**
- * lim_is_rs_nie_valid_in_sme_req_message()
+ * lim_is_rsn_ie_valid_in_sme_req_message()
  *
  * @mac_ctx   Pointer to Global MAC structure
  * @rsn_ie    Pointer to received RSN IE
@@ -54,22 +54,17 @@
  * Return: true when RSN IE is valid, false otherwise
  *
  */
-
 static uint8_t
-lim_is_rsn_ie_valid_in_sme_req_message(tpAniSirGlobal mac_ctx, tpSirRSNie rsn_ie)
+lim_is_rsn_ie_valid_in_sme_req_message(struct mac_context *mac_ctx,
+				       tpSirRSNie rsn_ie)
 {
-	uint8_t start = 0;
-	uint32_t privacy, val;
+	uint8_t start = 0, privacy;
+	uint32_t val;
 	int len;
 
-	if (wlan_cfg_get_int(mac_ctx, WNI_CFG_PRIVACY_ENABLED,
-			     &privacy) != eSIR_SUCCESS)
-		pe_warn("Unable to retrieve POI from CFG");
+	privacy = mac_ctx->mlme_cfg->wep_params.is_privacy_enabled;
 
-	if (wlan_cfg_get_int(mac_ctx, WNI_CFG_RSN_ENABLED, &val)
-		!= eSIR_SUCCESS)
-		pe_warn("Unable to retrieve RSN_ENABLED from CFG");
-
+	val = mac_ctx->mlme_cfg->feature_flags.enable_rsn;
 	if (rsn_ie->length && (!privacy || !val)) {
 		/* Privacy & RSN not enabled in CFG.
 		 * In order to allow mixed mode for Guest access
@@ -172,13 +167,13 @@ lim_is_rsn_ie_valid_in_sme_req_message(tpAniSirGlobal mac_ctx, tpSirRSNie rsn_ie
  *
  ***NOTE:
  *
- * @param  pMac   Pointer to Global MAC structure
+ * @param  mac   Pointer to Global MAC structure
  * @param  pWSCie Pointer to received WSC IE
  * @return true when WSC IE is valid, false otherwise
  */
 
 static uint8_t
-lim_is_addie_valid_in_sme_req_message(tpAniSirGlobal pMac, tpSirAddie pAddie)
+lim_is_addie_valid_in_sme_req_message(struct mac_context *mac, tpSirAddie pAddie)
 {
 	int left = pAddie->length;
 	uint8_t *ptr = pAddie->addIEdata;
@@ -219,22 +214,18 @@ lim_is_addie_valid_in_sme_req_message(tpAniSirGlobal pMac, tpSirAddie pAddie)
  * Return: true when RSN IE is valid, false otherwise
  */
 uint8_t
-lim_set_rs_nie_wp_aiefrom_sme_start_bss_req_message(tpAniSirGlobal mac_ctx,
+lim_set_rs_nie_wp_aiefrom_sme_start_bss_req_message(struct mac_context *mac_ctx,
 						    tpSirRSNie rsn_ie,
-						    tpPESession session)
+						    struct pe_session *session)
 {
 	uint32_t ret;
 	uint8_t wpa_idx = 0;
-	uint32_t privacy, val;
+	uint32_t val;
+	bool privacy;
 
-	if (wlan_cfg_get_int(mac_ctx, WNI_CFG_PRIVACY_ENABLED,
-			     &privacy) != eSIR_SUCCESS)
-		pe_warn("Unable to retrieve POI from CFG");
+	privacy = mac_ctx->mlme_cfg->wep_params.is_privacy_enabled;
 
-	if (wlan_cfg_get_int(mac_ctx, WNI_CFG_RSN_ENABLED,
-			     &val) != eSIR_SUCCESS)
-		pe_warn("Unable to retrieve RSN_ENABLED from CFG");
-
+	val = mac_ctx->mlme_cfg->feature_flags.enable_rsn;
 	if (rsn_ie->length && (!privacy || !val)) {
 		/*
 		 * Privacy & RSN not enabled in CFG.
@@ -284,7 +275,6 @@ lim_set_rs_nie_wp_aiefrom_sme_start_bss_req_message(tpAniSirGlobal mac_ctx,
 			return false;
 		}
 		return true;
-
 	} else if ((rsn_ie->length == rsn_ie->rsnIEdata[1] + 2)
 		   && (rsn_ie->rsnIEdata[0] == SIR_MAC_WPA_EID)) {
 		pe_debug("Only WPA IE is present");
@@ -346,13 +336,13 @@ lim_set_rs_nie_wp_aiefrom_sme_start_bss_req_message(tpAniSirGlobal mac_ctx,
  *
  ***NOTE:
  *
- * @param  pMac      Pointer to Global MAC structure
+ * @param  mac      Pointer to Global MAC structure
  * @param  pBssDescr Pointer to received Bss Descritipion
  * @return true when BSS description is valid, false otherwise
  */
 
 static uint8_t
-lim_is_bss_descr_valid_in_sme_req_message(tpAniSirGlobal pMac,
+lim_is_bss_descr_valid_in_sme_req_message(struct mac_context *mac,
 					  tpSirBssDescription pBssDescr)
 {
 	uint8_t valid = true;
@@ -380,7 +370,7 @@ end:
  */
 
 uint8_t
-lim_is_sme_start_bss_req_valid(tpAniSirGlobal mac_ctx,
+lim_is_sme_start_bss_req_valid(struct mac_context *mac_ctx,
 			       tpSirSmeStartBssReq start_bss_req)
 {
 	uint8_t i = 0;
@@ -492,13 +482,13 @@ lim_is_sme_start_bss_req_valid(tpAniSirGlobal mac_ctx,
  *
  ***NOTE:
  *
- * @param  pMac       Pointer to Global MAC structure
+ * @param  mac       Pointer to Global MAC structure
  * @param  pJoinReq   Pointer to received SME_JOIN_REQ message
  * @return true  when received SME_JOIN_REQ is formatted correctly
  *         false otherwise
  */
 
-uint8_t lim_is_sme_join_req_valid(tpAniSirGlobal pMac, tpSirSmeJoinReq pJoinReq)
+uint8_t lim_is_sme_join_req_valid(struct mac_context *mac, tpSirSmeJoinReq pJoinReq)
 {
 	uint8_t valid = true;
 
@@ -508,25 +498,25 @@ uint8_t lim_is_sme_join_req_valid(tpAniSirGlobal pMac, tpSirSmeJoinReq pJoinReq)
 	 * validity is not required.
 	 */
 	if (!pJoinReq->force_rsne_override &&
-	    !lim_is_rsn_ie_valid_in_sme_req_message(pMac, &pJoinReq->rsnIE)) {
+	    !lim_is_rsn_ie_valid_in_sme_req_message(mac, &pJoinReq->rsnIE)) {
 		pe_err("received SME_JOIN_REQ with invalid RSNIE");
 		valid = false;
 		goto end;
 	}
 
-	if (!lim_is_addie_valid_in_sme_req_message(pMac, &pJoinReq->addIEScan)) {
+	if (!lim_is_addie_valid_in_sme_req_message(mac, &pJoinReq->addIEScan)) {
 		pe_err("received SME_JOIN_REQ with invalid additional IE for scan");
 		valid = false;
 		goto end;
 	}
 
-	if (!lim_is_addie_valid_in_sme_req_message(pMac, &pJoinReq->addIEAssoc)) {
+	if (!lim_is_addie_valid_in_sme_req_message(mac, &pJoinReq->addIEAssoc)) {
 		pe_err("received SME_JOIN_REQ with invalid additional IE for assoc");
 		valid = false;
 		goto end;
 	}
 
-	if (!lim_is_bss_descr_valid_in_sme_req_message(pMac, &pJoinReq->bssDescription)) {
+	if (!lim_is_bss_descr_valid_in_sme_req_message(mac, &pJoinReq->bssDescription)) {
 		/* / Received eWNI_SME_JOIN_REQ with invalid BSS Info */
 		/* Log the event */
 		pe_err("received SME_JOIN_REQ with invalid bssInfo");
@@ -567,7 +557,7 @@ end:
  *
  ***NOTE:
  *
- * @param  pMac         Pointer to Global MAC structure
+ * @param  mac         Pointer to Global MAC structure
  * @param  pDisassocReq Pointer to received SME_DISASSOC_REQ message
  * @return true         When received SME_DISASSOC_REQ is formatted
  *                      correctly
@@ -575,9 +565,9 @@ end:
  */
 
 uint8_t
-lim_is_sme_disassoc_req_valid(tpAniSirGlobal pMac,
+lim_is_sme_disassoc_req_valid(struct mac_context *mac,
 			      tpSirSmeDisassocReq pDisassocReq,
-			      tpPESession psessionEntry)
+			      struct pe_session *pe_session)
 {
 	if (qdf_is_macaddr_group(&pDisassocReq->peer_macaddr) &&
 	    !qdf_is_macaddr_broadcast(&pDisassocReq->peer_macaddr))
@@ -600,7 +590,7 @@ lim_is_sme_disassoc_req_valid(tpAniSirGlobal pMac,
  *
  ***NOTE:
  *
- * @param  pMac         Pointer to Global MAC structure
+ * @param  mac         Pointer to Global MAC structure
  * @param  pDisassocCnf Pointer to received SME_DISASSOC_REQ message
  * @return true         When received SME_DISASSOC_CNF is formatted
  *                      correctly
@@ -608,9 +598,9 @@ lim_is_sme_disassoc_req_valid(tpAniSirGlobal pMac,
  */
 
 uint8_t
-lim_is_sme_disassoc_cnf_valid(tpAniSirGlobal pMac,
+lim_is_sme_disassoc_cnf_valid(struct mac_context *mac,
 			      tpSirSmeDisassocCnf pDisassocCnf,
-			      tpPESession psessionEntry)
+			      struct pe_session *pe_session)
 {
 	if (qdf_is_macaddr_group(&pDisassocCnf->peer_macaddr))
 		return false;
@@ -632,15 +622,15 @@ lim_is_sme_disassoc_cnf_valid(tpAniSirGlobal pMac,
  *
  ***NOTE:
  *
- * @param  pMac       Pointer to Global MAC structure
+ * @param  mac       Pointer to Global MAC structure
  * @param  pDeauthReq Pointer to received SME_DEAUTH_REQ message
  * @return true       When received SME_DEAUTH_REQ is formatted correctly
  *         false      otherwise
  */
 
 uint8_t
-lim_is_sme_deauth_req_valid(tpAniSirGlobal pMac, tpSirSmeDeauthReq pDeauthReq,
-			    tpPESession psessionEntry)
+lim_is_sme_deauth_req_valid(struct mac_context *mac, tpSirSmeDeauthReq pDeauthReq,
+			    struct pe_session *pe_session)
 {
 	if (qdf_is_macaddr_group(&pDeauthReq->peer_macaddr) &&
 	    !qdf_is_macaddr_broadcast(&pDeauthReq->peer_macaddr))
@@ -648,79 +638,6 @@ lim_is_sme_deauth_req_valid(tpAniSirGlobal pMac, tpSirSmeDeauthReq pDeauthReq,
 
 	return true;
 } /*** end lim_is_sme_deauth_req_valid() ***/
-
-/**
- * lim_is_sme_scan_req_valid()
- *
- ***FUNCTION:
- * This function is called by lim_process_sme_req_messages() upon
- * receiving SME_SCAN_REQ message from application.
- *
- ***LOGIC:
- * Message validity checks are performed in this function
- *
- ***ASSUMPTIONS:
- *
- ***NOTE:
- *
- * @param  pScanReq Pointer to received SME_SCAN_REQ message
- * @return true  when received SME_SCAN_REQ is formatted correctly
- *         false otherwise
- */
-
-uint8_t lim_is_sme_scan_req_valid(tpAniSirGlobal pMac, tpSirSmeScanReq pScanReq)
-{
-	uint8_t valid = true;
-	uint8_t i = 0;
-
-	if (pScanReq->numSsid > SIR_SCAN_MAX_NUM_SSID) {
-		valid = false;
-		pe_err("Number of SSIDs > SIR_SCAN_MAX_NUM_SSID");
-		goto end;
-	}
-
-	for (i = 0; i < pScanReq->numSsid; i++) {
-		if (pScanReq->ssId[i].length > SIR_MAC_MAX_SSID_LENGTH) {
-			pe_err("Requested SSID length > SIR_MAC_MAX_SSID_LENGTH");
-			valid = false;
-			goto end;
-		}
-	}
-	if ((pScanReq->bssType < 0) || (pScanReq->bssType > eSIR_AUTO_MODE)) {
-		pe_err("Invalid BSS Type");
-		valid = false;
-	}
-	if (qdf_is_macaddr_group(&pScanReq->bssId) &&
-		!qdf_is_macaddr_broadcast(&pScanReq->bssId)) {
-		valid = false;
-		pe_err("BSSID is group addr and is not Broadcast Addr");
-	}
-	if (!
-	    (pScanReq->scanType == eSIR_PASSIVE_SCAN
-	     || pScanReq->scanType == eSIR_ACTIVE_SCAN)) {
-		valid = false;
-		pe_err("Invalid Scan Type");
-	}
-	if (pScanReq->channelList.numChannels > SIR_MAX_NUM_CHANNELS) {
-		valid = false;
-		pe_err("Number of Channels > SIR_MAX_NUM_CHANNELS");
-	}
-
-	/*
-	** check min/max channelTime range
-	**/
-	if (valid) {
-		if ((pScanReq->scanType == eSIR_ACTIVE_SCAN) &&
-		    (pScanReq->maxChannelTime < pScanReq->minChannelTime)) {
-			pe_err("Max Channel Time < Min Channel Time");
-			valid = false;
-			goto end;
-		}
-	}
-
-end:
-	return valid;
-} /*** end lim_is_sme_scan_req_valid() ***/
 
 /**
  * lim_is_sme_set_context_req_valid()
@@ -742,7 +659,7 @@ end:
  */
 
 uint8_t
-lim_is_sme_set_context_req_valid(tpAniSirGlobal pMac,
+lim_is_sme_set_context_req_valid(struct mac_context *mac,
 				 tpSirSmeSetContextReq pSetContextReq)
 {
 	uint8_t i = 0;
@@ -791,13 +708,11 @@ lim_is_sme_set_context_req_valid(tpAniSirGlobal pMac,
 		valid = false;
 		goto end;
 	} else if (pSetContextReq->keyMaterial.edType > eSIR_ED_NONE) {
-		uint32_t poi;
+		bool privacy;
 
-		if (wlan_cfg_get_int(pMac, WNI_CFG_PRIVACY_ENABLED,
-				     &poi) != eSIR_SUCCESS)
-			pe_warn("Unable to retrieve POI from CFG");
+		privacy = mac->mlme_cfg->wep_params.is_privacy_enabled;
 
-		if (!poi) {
+		if (!privacy) {
 			/**
 			 * Privacy is not enabled
 			 * In order to allow mixed mode for Guest access
@@ -869,40 +784,3 @@ uint8_t lim_is_sme_stop_bss_req_valid(uint32_t *pMsg)
 
 	return valid;
 } /*** end lim_is_sme_stop_bss_req_valid() ***/
-
-/**
- * lim_get_bss_id_from_sme_join_req_msg()
- *
- ***FUNCTION:
- * This function is called in various places to get BSSID
- * from BSS description/Neighbor BSS Info in the SME_JOIN_REQ/
- * SME_REASSOC_REQ message.
- *
- ***PARAMS:
- *
- ***LOGIC:
- *
- ***ASSUMPTIONS:
- * NA
- *
- ***NOTE:
- * NA
- *
- * @param     pBuf   - Pointer to received SME_JOIN/SME_REASSOC_REQ
- *                     message
- * @return    pBssId - Pointer to BSSID
- */
-
-uint8_t *lim_get_bss_id_from_sme_join_req_msg(uint8_t *pBuf)
-{
-	if (!pBuf)
-		return NULL;
-
-	pBuf += sizeof(uint32_t);       /* skip message header */
-
-	pBuf += lim_get_u16(pBuf) + sizeof(uint16_t);     /* skip RSN IE */
-
-	pBuf += sizeof(uint16_t);       /* skip length of BSS description */
-
-	return pBuf;
-} /*** end lim_get_bss_id_from_sme_join_req_msg() ***/

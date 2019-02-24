@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -25,16 +25,16 @@
 
    BRIEF DESCRIPTION:
    WLAN Host Version file.
-   Build number automaticly updated by build scripts.
+   Build number automatically updated by build scripts.
 
    ===========================================================================*/
 
 #define QWLAN_VERSION_MAJOR            5
-#define QWLAN_VERSION_MINOR            1
-#define QWLAN_VERSION_PATCH            1
-#define QWLAN_VERSION_EXTRA            "B"
-#define QWLAN_VERSION_BUILD            70
+#define QWLAN_VERSION_MINOR            2
+#define QWLAN_VERSION_PATCH            0
+#define QWLAN_VERSION_EXTRA            "J"
+#define QWLAN_VERSION_BUILD            116
 
-#define QWLAN_VERSIONSTR               "5.1.1.70B"
+#define QWLAN_VERSIONSTR               "5.2.0.116J"
 
 #endif /* QWLAN_VERSION_H */

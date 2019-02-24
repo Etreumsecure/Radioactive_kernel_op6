@@ -35,7 +35,6 @@
 #endif
 #include "i_bmi.h"
 #include "cds_api.h"
-#include "cds_concurrency.h"
 
 #ifdef CONFIG_DISABLE_SLEEP_BMI_OPTION
 static inline void ol_sdio_disable_sleep(struct ol_context *ol_ctx)
@@ -63,7 +62,7 @@ static inline void ol_sdio_disable_sleep(struct ol_context *ol_ctx)
 #endif
 
 /**
- * ol_usb_extra_initialization() - USB extra initilization
+ * ol_usb_extra_initialization() - USB extra initialization
  * @ol_ctx: pointer to ol_context
  *
  * USB specific initialization after firmware download
@@ -104,7 +103,7 @@ QDF_STATUS ol_sdio_extra_initialization(struct ol_context *ol_ctx)
 
 	/* get the block sizes */
 	status = hif_get_config_item(scn,
-				HIF_DEVICE_GET_MBOX_BLOCK_SIZE,
+				HIF_DEVICE_GET_BLOCK_SIZE,
 				blocksizes, sizeof(blocksizes));
 	if (status != EOK) {
 		BMI_ERR("Failed to get block size info from HIF layer");

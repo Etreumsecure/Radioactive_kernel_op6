@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -37,6 +37,7 @@
 #include "csr_link_list.h"
 #include "sme_power_save.h"
 
+struct wmi_twt_enable_complete_event_param;
 /*--------------------------------------------------------------------------
   Type declarations
   ------------------------------------------------------------------------*/
@@ -44,50 +45,19 @@
 /* Mask can be only have one bit set */
 typedef enum eSmeCommandType {
 	eSmeNoCommand = 0,
-	eSmeDropCommand,
 	/* this is not a command, it is to identify this is a CSR command */
 	eSmeCsrCommandMask = 0x10000,
-	eSmeCommandScan,
 	eSmeCommandRoam,
 	eSmeCommandWmStatusChange,
-	eSmeCommandSetKey,
-	eSmeCommandAddStaSession,
-	eSmeCommandDelStaSession,
-#ifdef FEATURE_WLAN_TDLS
-	/*
-	 * eSmeTdlsCommandMask = 0x80000,
-	 * To identify TDLS commands <TODO>
-	 * These can be considered as csr commands.
-	 */
-	eSmeCommandTdlsSendMgmt,
-	eSmeCommandTdlsAddPeer,
-	eSmeCommandTdlsDelPeer,
-	eSmeCommandTdlsLinkEstablish,
-#endif
-	/* PMC */
-	eSmePmcCommandMask = 0x20000,   /* To identify PMC commands */
-	eSmeCommandEnterBmps,
-	eSmeCommandExitBmps,
-	eSmeCommandEnterUapsd,
-	eSmeCommandExitUapsd,
-	eSmeCommandExitWowl,
-	eSmeCommandEnterStandby,
+	e_sme_command_del_sta_session,
 	/* QOS */
 	eSmeQosCommandMask = 0x40000,   /* To identify Qos commands */
 	eSmeCommandAddTs,
 	eSmeCommandDelTs,
-#ifdef FEATURE_OEM_DATA_SUPPORT
-	eSmeCommandOemDataReq = 0x80000, /* To identify the oem data commands */
-#endif
-	eSmeCommandRemainOnChannel,
 	e_sme_command_set_hw_mode,
 	e_sme_command_nss_update,
 	e_sme_command_set_dual_mac_config,
 	e_sme_command_set_antenna_mode,
-	e_sme_command_issue_self_reassoc,
-	eSmeCommandNdpInitiatorRequest,
-	eSmeCommandNdpResponderRequest,
-	eSmeCommandNdpDataEndInitiatorRequest,
 } eSmeCommandType;
 
 typedef enum eSmeState {
@@ -96,8 +66,8 @@ typedef enum eSmeState {
 	SME_STATE_READY,
 } eSmeState;
 
-#define SME_IS_START(pMac)  (SME_STATE_STOP != (pMac)->sme.state)
-#define SME_IS_READY(pMac)  (SME_STATE_READY == (pMac)->sme.state)
+#define SME_IS_START(mac)  (SME_STATE_STOP != (mac)->sme.state)
+#define SME_IS_READY(mac)  (SME_STATE_READY == (mac)->sme.state)
 
 /* HDD Callback function */
 typedef void (*pIbssPeerInfoCb)(void *pUserData,
@@ -109,21 +79,33 @@ typedef struct tagSmePeerInfoHddCbkInfo {
 	pIbssPeerInfoCb peerInfoCbk;
 } tSmePeerInfoHddCbkInfo;
 
-typedef struct sStatsExtEvent {
+/**
+ * struct stats_ext_event - stats_ext_event payload
+ * @vdev_id: ID of the vdev for the stats
+ * @event_data_len: length of the @event_data
+ * @event_data: actual ext stats
+ */
+struct stats_ext_event {
 	uint32_t vdev_id;
 	uint32_t event_data_len;
 	uint8_t event_data[];
-} tStatsExtEvent, *tpStatsExtEvent;
+};
 
 /**
- * struct stats_ext2_event - stats ext2 event
- * @hole_cnt: hole counter
- * @hole_info_array: hole informaton
+ * typedef stats_ext_cb - stats ext callback
+ * @hdd_handle: Opaque handle to the HDD context
+ * @data: stats ext payload from firmware
  */
-struct stats_ext2_event {
-	uint32_t hole_cnt;
-	uint32_t hole_info_array[];
-};
+typedef void (*stats_ext_cb)(hdd_handle_t hdd_handle,
+			     struct stats_ext_event *data);
+
+/**
+ * typedef stats_ext2_cb - stats ext2 callback
+ * @hdd_handle: Opaque handle to the HDD context
+ * @data: stats ext2 payload from firmware
+ */
+typedef void (*stats_ext2_cb)(hdd_handle_t hdd_handle,
+			      struct sir_sme_rx_aggr_hole_ind *data);
 
 #define MAX_ACTIVE_CMD_STATS    16
 
@@ -139,23 +121,116 @@ typedef struct sSelfRecoveryStats {
 	uint8_t cmdStatsIndx;
 } tSelfRecoveryStats;
 
-#ifdef WLAN_FEATURE_GTK_OFFLOAD
-/* GTK Offload Information Callback declaration */
-typedef void (*gtk_offload_get_info_callback)(void *callback_context,
-		tpSirGtkOffloadGetInfoRspParams
-		pGtkOffloadGetInfoRsp);
-#endif
-#ifdef FEATURE_WLAN_SCAN_PNO
-/*Pref netw found Cb declaration*/
-typedef void (*preferred_network_found_ind_cb)(void *callback_context,
-		tpSirPrefNetworkFoundInd
-		pPrefNetworkFoundInd);
-#endif
+typedef void (*link_layer_stats_cb)(hdd_handle_t hdd_handle,
+				    int indication_type,
+				    tSirLLStatsResults *results,
+				    void *cookie);
+
+typedef void (*ext_scan_ind_cb)(hdd_handle_t hdd_handle,
+				const uint16_t, void *);
 
 typedef void (*ocb_callback)(void *context, void *response);
-typedef void (*sme_set_thermal_level_callback)(void *context, u_int8_t level);
-typedef void (*p2p_lo_callback)(void *context, void *event);
+typedef void (*sme_set_thermal_level_callback)(hdd_handle_t hdd_handle,
+					       u_int8_t level);
+typedef void (*p2p_lo_callback)(void *context,
+				struct sir_p2p_lo_event *event);
+#ifdef FEATURE_OEM_DATA_SUPPORT
 typedef void (*sme_send_oem_data_rsp_msg)(struct oem_data_rsp *);
+#endif
+
+typedef void (*twt_enable_cb)(hdd_handle_t hdd_handle,
+			      struct wmi_twt_enable_complete_event_param *params);
+typedef void (*twt_disable_cb)(hdd_handle_t hdd_handle);
+
+#ifdef FEATURE_WLAN_APF
+/**
+ * typedef apf_get_offload_cb - APF offload callback signature
+ * @context: Opaque context that the client can use to associate the
+ *    callback with the request
+ * @caps: APF offload capabilities as reported by firmware
+ */
+struct sir_apf_get_offload;
+typedef void (*apf_get_offload_cb)(void *context,
+				   struct sir_apf_get_offload *caps);
+
+/**
+ * typedef apf_read_mem_cb - APF read memory response callback
+ * @context: Opaque context that the client can use to associate the
+ *    callback with the request
+ * @evt: APF read memory response event parameters
+ */
+typedef void (*apf_read_mem_cb)(void *context,
+				struct wmi_apf_read_memory_resp_event_params
+									  *evt);
+#endif /* FEATURE_WLAN_APF */
+
+/**
+ * typedef rssi_threshold_breached_cb - RSSI threshold breach callback
+ * @hdd_handle: Opaque handle to the HDD context
+ * @event: The RSSI breach event
+ */
+typedef void (*rssi_threshold_breached_cb)(hdd_handle_t hdd_handle,
+					   struct rssi_breach_event *event);
+
+/**
+ * typedef get_chain_rssi_callback - get chain rssi callback
+ * @context: Opaque context that the client can use to associate the
+ *    callback with the request
+ * @data: chain rssi result reported by firmware
+ */
+struct chain_rssi_result;
+typedef void (*get_chain_rssi_callback)(void *context,
+					struct chain_rssi_result *data);
+
+typedef void (*tx_queue_cb)(hdd_handle_t hdd_handle, uint32_t vdev_id,
+			    enum netif_action_type action,
+			    enum netif_reason_type reason);
+
+/**
+ * typedef pwr_save_fail_cb - power save fail callback function
+ * @hdd_handle: HDD handle registered with SME
+ * @params: failure parameters
+ */
+struct chip_pwr_save_fail_detected_params;
+typedef void (*pwr_save_fail_cb)(hdd_handle_t hdd_handle,
+			struct chip_pwr_save_fail_detected_params *params);
+
+/**
+ * typedef bt_activity_info_cb - bluetooth activity callback function
+ * @hdd_handle: HDD handle registered with SME
+ * @bt_activity: bluetooth activity information
+ */
+typedef void (*bt_activity_info_cb)(hdd_handle_t hdd_handle,
+				    uint32_t bt_activity);
+
+/**
+ * typedef congestion_cb - congestion callback function
+ * @hdd_handle: HDD handle registered with SME
+ * @congestion: Current congestion value
+ * @vdev_id: ID of the vdev for which congestion is being reported
+ */
+typedef void (*congestion_cb)(hdd_handle_t hdd_handle, uint32_t congestion,
+			      uint32_t vdev_id);
+
+/**
+ * typedef rso_cmd_status_cb - RSO command status  callback function
+ * @hdd_handle: HDD handle registered with SME
+ * @rso_status: Status of the operation
+ */
+typedef void (*rso_cmd_status_cb)(hdd_handle_t hdd_handle,
+				  struct rso_cmd_status *rso_status);
+
+/**
+ * typedef lost_link_info_cb - lost link indication callback function
+ * @hdd_handle: HDD handle registered with SME
+ * @lost_link_info: Information about the lost link
+ */
+typedef void (*lost_link_info_cb)(hdd_handle_t hdd_handle,
+				  struct sir_lost_link_info *lost_link_info);
+
+#ifdef WLAN_FEATURE_MOTION_DETECTION
+typedef QDF_STATUS (*md_host_evt_cb)(void *hdd_ctx, sir_md_evt *event);
+#endif /* WLAN_FEATURE_MOTION_DETECTION */
 
 typedef struct tagSmeStruct {
 	eSmeState state;
@@ -163,43 +238,33 @@ typedef struct tagSmeStruct {
 	uint32_t totalSmeCmd;
 	/* following pointer contains array of pointers for tSmeCmd* */
 	void **pSmeCmdBufAddr;
-	tDblLinkList smeCmdActiveList;
-	tDblLinkList smeCmdPendingList;
 	tDblLinkList smeCmdFreeList;    /* preallocated roam cmd list */
-	enum tQDF_ADAPTER_MODE currDeviceMode;
-#ifdef FEATURE_WLAN_LPHB
-	void (*pLphbIndCb)(void *pHddCtx, tSirLPHBInd *indParam);
-#endif /* FEATURE_WLAN_LPHB */
-	/* pending scan command list */
-	tDblLinkList smeScanCmdPendingList;
-	/* active scan command list */
-	tDblLinkList smeScanCmdActiveList;
+	enum QDF_OPMODE currDeviceMode;
 	tSmePeerInfoHddCbkInfo peerInfoParams;
 #ifdef FEATURE_WLAN_DIAG_SUPPORT_CSR
 	host_event_wlan_status_payload_type eventPayload;
 #endif
-#ifdef FEATURE_WLAN_CH_AVOID
-	void (*pChAvoidNotificationCb)(void *hdd_context, void *indi_param);
-#endif /* FEATURE_WLAN_CH_AVOID */
-#ifdef WLAN_FEATURE_LINK_LAYER_STATS
 	void *ll_stats_context;
-	void (*pLinkLayerStatsIndCallback)(void *callbackContext,
-			int indType, void *pRsp, void *context);
-	void (*link_layer_stats_ext_cb)(tHddHandle callback_ctx,
+	link_layer_stats_cb link_layer_stats_cb;
+	void (*link_layer_stats_ext_cb)(hdd_handle_t callback_ctx,
 					tSirLLStatsResults *rsp);
-#endif /* WLAN_FEATURE_LINK_LAYER_STATS */
-
 #ifdef WLAN_POWER_DEBUGFS
 	void *power_debug_stats_context;
 	void (*power_stats_resp_callback)(struct power_stats_response *rsp,
 						void *callback_context);
+#endif
+#ifdef WLAN_FEATURE_BEACON_RECEPTION_STATS
+	void *beacon_stats_context;
+	void (*beacon_stats_resp_callback)(struct bcn_reception_stats_rsp *rsp,
+					   void *callback_context);
 #endif
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 	void (*pAutoShutdownNotificationCb)(void);
 #endif
 	/* Maximum interfaces allowed by the host */
 	uint8_t max_intf_count;
-	void (*StatsExtCallback)(void *, tStatsExtEvent *);
+	stats_ext_cb stats_ext_cb;
+	stats_ext2_cb stats_ext2_cb;
 	/* linkspeed callback */
 	void (*pLinkSpeedIndCb)(tSirLinkSpeedInfo *indParam,
 			void *pDevContext);
@@ -213,14 +278,10 @@ typedef struct tagSmeStruct {
 		void *pcontext);
 	void *pget_peer_info_ext_cb_context;
 #ifdef FEATURE_WLAN_EXTSCAN
-	void (*pExtScanIndCb)(void *, const uint16_t, void *);
+	ext_scan_ind_cb ext_scan_ind_cb;
 #endif /* FEATURE_WLAN_EXTSCAN */
-#ifdef WLAN_FEATURE_NAN
-	void (*nanCallback)(void *, tSirNanEvent *);
-#endif
-	bool enableSelfRecovery;
-	tCsrLinkStatusCallback linkStatusCallback;
-	void *linkStatusContext;
+	csr_link_status_callback link_status_callback;
+	void *link_status_context;
 	int (*get_tsf_cb)(void *pcb_cxt, struct stsf *ptsf);
 	void *get_tsf_cxt;
 	/* get temperature event context and callback */
@@ -228,59 +289,40 @@ typedef struct tagSmeStruct {
 	void (*pGetTemperatureCb)(int temperature, void *context);
 	uint8_t miracast_value;
 	struct ps_global_info  ps_global_info;
-#ifdef WLAN_FEATURE_GTK_OFFLOAD
-	/* routine to call for GTK Offload Information */
-	gtk_offload_get_info_callback gtk_offload_get_info_cb;
-	/* value to be passed as parameter to routine specified above */
-	void *gtk_offload_get_info_cb_context;
-#endif /* WLAN_FEATURE_GTK_OFFLOAD */
-#ifdef FEATURE_WLAN_SCAN_PNO
-	/* routine to call for Preferred Network Found Indication */
-	preferred_network_found_ind_cb pref_netw_found_cb;
-	/* value to be passed as parameter to routine specified above */
-	void *preferred_network_found_ind_cb_ctx;
-#endif /* FEATURE_WLAN_SCAN_PNO */
-	void (*rssi_threshold_breached_cb)(void *, struct rssi_breach_event *);
-	hw_mode_transition_cb sme_hw_mode_trans_cb;
-	/* OCB callbacks */
-	void *ocb_set_config_context;
-	ocb_callback ocb_set_config_callback;
-	void *ocb_get_tsf_timer_context;
-	ocb_callback ocb_get_tsf_timer_callback;
-	void *dcc_get_stats_context;
-	ocb_callback dcc_get_stats_callback;
-	void *dcc_update_ndl_context;
-	ocb_callback dcc_update_ndl_callback;
-	void *dcc_stats_event_context;
-	ocb_callback dcc_stats_event_callback;
+	rssi_threshold_breached_cb rssi_threshold_breached_cb;
 	sme_set_thermal_level_callback set_thermal_level_cb;
-	void *saved_scan_cmd;
-	void (*papf_get_offload_cb)(void *context,
-			struct sir_apf_get_offload *);
+	void *apf_get_offload_context;
+#ifdef FEATURE_P2P_LISTEN_OFFLOAD
 	p2p_lo_callback p2p_lo_event_callback;
 	void *p2p_lo_event_context;
+#endif
+#ifdef FEATURE_OEM_DATA_SUPPORT
 	sme_send_oem_data_rsp_msg oem_data_rsp_callback;
-	void *encrypt_decrypt_context;
-	void (*encrypt_decrypt_cb)(void *cookie,
-				   struct sir_encrypt_decrypt_rsp_params *rsp);
-	void (*lost_link_info_cb)(void *context,
-			struct sir_lost_link_info *lost_link_info);
-	void (*rso_cmd_status_cb)(void *hdd_context,
-			 struct rso_cmd_status *rso_status);
+#endif
+	lost_link_info_cb lost_link_info_cb;
+
+	bool (*set_connection_info_cb)(bool);
+	bool (*get_connection_info_cb)(uint8_t *session_id,
+			enum scan_reject_states *reason);
+	rso_cmd_status_cb rso_cmd_status_cb;
+	congestion_cb congestion_cb;
+	pwr_save_fail_cb chip_power_save_fail_cb;
+	bt_activity_info_cb bt_activity_info_cb;
 	void *get_arp_stats_context;
 	void (*get_arp_stats_cb)(void *, struct rsp_stats *, void *);
-	void (*bt_activity_info_cb)(void *context, uint32_t bt_activity);
-	void (*chip_power_save_fail_cb)(void *,
-			struct chip_pwr_save_fail_detected_params *);
-	void *pchain_rssi_ind_ctx;
-	void (*pchain_rssi_ind_cb)(void *hdd_ctx, void *pmsg, void *context);
-	void (*spectral_scan_cb)(void *context,
-			struct spectral_samp_msg *samp_msg);
-	void (*stats_ext2_cb)(void *, struct stats_ext2_event *);
-	void (*congestion_cb)(void *, uint32_t congestion, uint32_t vdev_id);
-	void (*apf_read_mem_cb)(void *context,
-			struct wmi_apf_read_memory_resp_event_params *params);
+	get_chain_rssi_callback get_chain_rssi_cb;
+	void *get_chain_rssi_context;
+	tx_queue_cb tx_queue_cb;
+	twt_enable_cb twt_enable_cb;
+	twt_disable_cb twt_disable_cb;
+#ifdef FEATURE_WLAN_APF
+	apf_get_offload_cb apf_get_offload_cb;
+	apf_read_mem_cb apf_read_mem_cb;
+#endif
+#ifdef WLAN_FEATURE_MOTION_DETECTION
+	md_host_evt_cb md_host_evt_cb;
+	void *md_ctx;
+#endif /* WLAN_FEATURE_MOTION_DETECTION */
 } tSmeStruct, *tpSmeStruct;
-
 
 #endif /* #if !defined( __SMEINTERNAL_H ) */

@@ -35,15 +35,11 @@
 
 #define ANI_OUI  0x000AF5
 
-/* / Max WDS info length. */
-#define ANI_WDS_INFO_MAX_LENGTH        64
-
 /* This is to force compiler to use the maximum of an int for enum */
 #define SIR_MAX_ENUM_SIZE    0x7FFFFFFF
 
 /* Max key size  including the WAPI and TKIP */
 #define WLAN_MAX_KEY_RSC_LEN         16
-#define WLAN_WAPI_KEY_RSC_LEN        16
 
 #ifndef false
 #undef false
@@ -63,9 +59,10 @@ typedef enum eAniAuthType {
 #if defined FEATURE_WLAN_ESE
 	eSIR_LEAP_AUTH = 0x80,
 #endif
-	eSIR_FILS_SK_WITHOUT_PFS = 4,
-	eSIR_FILS_SK_WITH_PFS = 5,
-	eSIR_FILS_PK_AUTH = 6,
+	SIR_FILS_SK_WITHOUT_PFS = 4,
+	SIR_FILS_SK_WITH_PFS = 5,
+	SIR_FILS_PK_AUTH = 6,
+	eSIR_AUTH_TYPE_OWE,
 	eSIR_AUTO_SWITCH,
 	eSIR_DONOT_USE_AUTH_TYPE = SIR_MAX_ENUM_SIZE
 } tAniAuthType;
@@ -106,11 +103,6 @@ typedef struct sAniSSID {
 	uint8_t length;
 	uint8_t ssId[SIR_MAC_MAX_SSID_LENGTH];
 } tAniSSID, *tpAniSSID;
-
-typedef struct sAniApName {
-	uint8_t length;
-	uint8_t name[SIR_MAC_MAX_SSID_LENGTH];
-} tAniApName, *tpAniApName;
 
 /* / RSN IE information */
 typedef struct sSirRSNie {

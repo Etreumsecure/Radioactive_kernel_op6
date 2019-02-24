@@ -26,7 +26,6 @@
 #include "sme_inside.h"
 #include "sme_api.h"
 #include "cfg_api.h"
-#include "cds_regdomain.h"
 
 #ifdef FEATURE_WLAN_DIAG_SUPPORT
 #include "host_diag_core_event.h"
@@ -34,8 +33,11 @@
 #endif /* FEATURE_WLAN_DIAG_SUPPORT */
 
 #include "csr_inside_api.h"
+
 #include "rrm_global.h"
-#include "wma.h"
+#include <wlan_scan_ucfg_api.h>
+#include <wlan_scan_utils_api.h>
+#include <wlan_utility.h>
 
 /* Roam score for a neighbor AP will be calculated based on the below
  * definitions. The calculated roam score will be used to select the
@@ -64,7 +66,7 @@ uint64_t rrm_scan_timer;
 /**
  * rrm_ll_purge_neighbor_cache() -Purges all the entries in the neighbor cache
  *
- * @pMac: Pointer to the Hal Handle.
+ * @mac: Pointer to the Hal Handle.
  * @pList: Pointer the List that should be purged.
  *
  * This function purges all the entries in the neighbor cache and frees up all
@@ -72,7 +74,7 @@ uint64_t rrm_scan_timer;
  *
  * Return: void
  */
-static void rrm_ll_purge_neighbor_cache(tpAniSirGlobal pMac,
+static void rrm_ll_purge_neighbor_cache(struct mac_context *mac,
 	tDblLinkList *pList)
 {
 	tListElem *pEntry;
@@ -91,7 +93,7 @@ static void rrm_ll_purge_neighbor_cache(tpAniSirGlobal pMac,
 /**
  * rrm_indicate_neighbor_report_result() -calls the callback registered for
  *                                                      neighbor report
- * @pMac: Pointer to the Hal Handle.
+ * @mac: Pointer to the Hal Handle.
  * @qdf_status - QDF_STATUS_SUCCESS/QDF_STATUS_FAILURE based on whether a valid
  *                       report is received or neighbor timer expired
  *
@@ -101,41 +103,41 @@ static void rrm_ll_purge_neighbor_cache(tpAniSirGlobal pMac,
  *
  * Return: void
  */
-static void rrm_indicate_neighbor_report_result(tpAniSirGlobal pMac,
+static void rrm_indicate_neighbor_report_result(struct mac_context *mac,
 						QDF_STATUS qdf_status)
 {
 	NeighborReportRspCallback callback;
 	void *callbackContext;
 
 	/* Reset the neighbor response pending status */
-	pMac->rrm.rrmSmeContext.neighborReqControlInfo.isNeighborRspPending =
+	mac->rrm.rrmSmeContext.neighborReqControlInfo.isNeighborRspPending =
 		false;
 
 	/* Stop the timer if it is already running.
 	 *  The timer should be running only in the SUCCESS case.
 	 */
 	if (QDF_TIMER_STATE_RUNNING ==
-	    qdf_mc_timer_get_current_state(&pMac->rrm.rrmSmeContext.
+	    qdf_mc_timer_get_current_state(&mac->rrm.rrmSmeContext.
 					   neighborReqControlInfo.
 					   neighborRspWaitTimer)) {
 		sme_debug("No entry in neighbor report cache");
-		qdf_mc_timer_stop(&pMac->rrm.rrmSmeContext.
+		qdf_mc_timer_stop(&mac->rrm.rrmSmeContext.
 				  neighborReqControlInfo.neighborRspWaitTimer);
 	}
 	callback =
-		pMac->rrm.rrmSmeContext.neighborReqControlInfo.
+		mac->rrm.rrmSmeContext.neighborReqControlInfo.
 		neighborRspCallbackInfo.neighborRspCallback;
 	callbackContext =
-		pMac->rrm.rrmSmeContext.neighborReqControlInfo.
+		mac->rrm.rrmSmeContext.neighborReqControlInfo.
 		neighborRspCallbackInfo.neighborRspCallbackContext;
 
 	/* Reset the callback and the callback context before calling the
 	 * callback. It is very likely that there may be a registration in
 	 * callback itself.
 	 */
-	pMac->rrm.rrmSmeContext.neighborReqControlInfo.neighborRspCallbackInfo.
+	mac->rrm.rrmSmeContext.neighborReqControlInfo.neighborRspCallbackInfo.
 	neighborRspCallback = NULL;
-	pMac->rrm.rrmSmeContext.neighborReqControlInfo.neighborRspCallbackInfo.
+	mac->rrm.rrmSmeContext.neighborReqControlInfo.neighborRspCallbackInfo.
 	neighborRspCallbackContext = NULL;
 
 	/* Call the callback with the status received from caller */
@@ -158,7 +160,7 @@ static void rrm_indicate_neighbor_report_result(tpAniSirGlobal pMac,
  */
 
 static QDF_STATUS
-sme_rrm_send_beacon_report_xmit_ind(tpAniSirGlobal mac_ctx,
+sme_rrm_send_beacon_report_xmit_ind(struct mac_context *mac_ctx,
 	tCsrScanResultInfo **result_arr, uint8_t msrmnt_status,
 	uint8_t bss_count)
 {
@@ -183,10 +185,9 @@ sme_rrm_send_beacon_report_xmit_ind(tpAniSirGlobal mac_ctx,
 	do {
 		length = sizeof(tSirBeaconReportXmitInd);
 		beacon_rep = qdf_mem_malloc(length);
-		if (NULL == beacon_rep) {
-			sme_err("Unable to allocate memory for beacon report");
+		if (!beacon_rep)
 			return QDF_STATUS_E_NOMEM;
-		}
+
 		beacon_rep->messageType = eWNI_SME_BEACON_REPORT_RESP_XMIT_IND;
 		beacon_rep->length = length;
 		beacon_rep->uDialogToken = rrm_ctx->token;
@@ -237,7 +238,7 @@ sme_rrm_send_beacon_report_xmit_ind(tpAniSirGlobal mac_ctx,
 			(cur_result) ? false : msrmnt_status;
 		sme_debug("SME Sending BcnRepXmit to PE numBss %d i %d j %d",
 			beacon_rep->numBssDesc, i, j);
-		status = cds_send_mb_message_to_mac(beacon_rep);
+		status = umac_send_mb_message_to_mac(beacon_rep);
 		if (status != QDF_STATUS_SUCCESS)
 			for (counter = 0; counter < i; ++counter)
 				qdf_mem_free(bss_desc_to_free[counter]);
@@ -264,19 +265,19 @@ sme_rrm_send_beacon_report_xmit_ind(tpAniSirGlobal mac_ctx,
  * Return: status
  */
 static QDF_STATUS sme_ese_send_beacon_req_scan_results(
-	tpAniSirGlobal mac_ctx, uint32_t session_id,
+	struct mac_context *mac_ctx, uint32_t session_id,
 	uint8_t channel, tCsrScanResultInfo **result_arr,
 	uint8_t msrmnt_status, uint8_t bss_count)
 {
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
-	tSirRetStatus fill_ie_status;
+	QDF_STATUS fill_ie_status;
 	tpSirBssDescription bss_desc = NULL;
 	uint32_t ie_len = 0;
 	uint32_t out_ie_len = 0;
 	uint8_t bss_counter = 0;
 	tCsrScanResultInfo *cur_result = NULL;
 	tpRrmSMEContext rrm_ctx = &mac_ctx->rrm.rrmSmeContext;
-	tCsrRoamInfo roam_info;
+	struct csr_roam_info roam_info;
 	tSirEseBcnReportRsp bcn_rpt_rsp;
 	tpSirEseBcnReportRsp bcn_report = &bcn_rpt_rsp;
 	tpCsrEseBeaconReqParams cur_meas_req = NULL;
@@ -347,7 +348,7 @@ static QDF_STATUS sme_ese_send_beacon_req_scan_results(
 						&(bcn_report->bcnRepBssInfo[j].
 						pBuf),
 						&out_ie_len);
-			if (eSIR_FAILURE == fill_ie_status)
+			if (QDF_STATUS_E_FAILURE == fill_ie_status)
 				continue;
 			bcn_report->bcnRepBssInfo[j].ieLen = out_ie_len;
 
@@ -405,11 +406,12 @@ static QDF_STATUS sme_ese_send_beacon_req_scan_results(
  *
  * Return: QDF_STATUS
  */
-static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
+static QDF_STATUS sme_rrm_send_scan_result(struct mac_context *mac_ctx,
 					   uint8_t num_chan,
 					   uint8_t *chan_list,
 					   uint8_t measurementdone)
 {
+	mac_handle_t mac_handle = MAC_HANDLE(mac_ctx);
 	tCsrScanResultFilter filter;
 	tScanResultHandle result_handle;
 	tCsrScanResultInfo *scan_results, *next_result;
@@ -419,20 +421,18 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 	uint8_t num_scan_results, counter = 0;
 	tpRrmSMEContext rrm_ctx = &mac_ctx->rrm.rrmSmeContext;
 	uint32_t session_id;
-	tCsrRoamInfo *roam_info;
+	struct csr_roam_info *roam_info = NULL;
 	tSirScanType scan_type;
+	struct csr_roam_session *session;
 
 	qdf_mem_zero(&filter, sizeof(filter));
 	filter.BSSIDs.numOfBSSIDs = 1;
 	filter.BSSIDs.bssid = (struct qdf_mac_addr *)&rrm_ctx->bssId;
 
 	if (rrm_ctx->ssId.length) {
-		filter.SSIDs.SSIDList =
-			(tCsrSSIDInfo *) qdf_mem_malloc(sizeof(tCsrSSIDInfo));
-		if (filter.SSIDs.SSIDList == NULL) {
-			sme_err("qdf_mem_malloc failed");
+		filter.SSIDs.SSIDList = qdf_mem_malloc(sizeof(tCsrSSIDInfo));
+		if (!filter.SSIDs.SSIDList)
 			return QDF_STATUS_E_NOMEM;
-		}
 
 		filter.SSIDs.SSIDList->SSID.length =
 			rrm_ctx->ssId.length;
@@ -457,8 +457,8 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 		sme_debug("BSSID mismatch, using current session_id");
 		session_id = mac_ctx->roam.roamSession->sessionId;
 	}
-	status = sme_scan_get_result(mac_ctx, (uint8_t) session_id,
-					&filter, &result_handle);
+	status = sme_scan_get_result(mac_handle, (uint8_t)session_id,
+				     &filter, &result_handle);
 
 	if (filter.SSIDs.SSIDList)
 		qdf_mem_free(filter.SSIDs.SSIDList);
@@ -467,7 +467,7 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 	if (NULL == result_handle) {
 		/*
 		 * no scan results
-		 * Spec. doesnt say anything about such condition
+		 * Spec. doesn't say anything about such condition
 		 * Since section 7.4.6.2 (IEEE802.11k-2008) says-rrm report
 		 * frame should contain one or more report IEs. It probably
 		 * means dont send any respose if no matching BSS found.
@@ -491,7 +491,7 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 					NULL, measurementdone, 0);
 		return status;
 	}
-	scan_results = sme_scan_result_get_first(mac_ctx, result_handle);
+	scan_results = sme_scan_result_get_first(mac_handle, result_handle);
 	if (NULL == scan_results && measurementdone) {
 #ifdef FEATURE_WLAN_ESE
 		if (eRRM_MSG_SOURCE_ESE_UPLOAD == rrm_ctx->msgSource) {
@@ -519,15 +519,22 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 	scanresults_arr = qdf_mem_malloc(num_scan_results *
 					 sizeof(next_result));
 	if (!scanresults_arr) {
-		sme_err("Failed to allocate scanresults_arr");
 		status = QDF_STATUS_E_NOMEM;
 		goto rrm_send_scan_results_done;
 	}
 
 	roam_info = qdf_mem_malloc(sizeof(*roam_info));
-	if (NULL == roam_info) {
-		sme_err("vos_mem_malloc failed");
+	if (!roam_info) {
 		status = QDF_STATUS_E_NOMEM;
+		goto rrm_send_scan_results_done;
+	}
+
+	session = CSR_GET_SESSION(mac_ctx, session_id);
+	if ((!session) ||  (!csr_is_conn_state_connected_infra(
+	    mac_ctx, session_id)) ||
+	    (NULL == session->pConnectBssDesc)) {
+		sme_err("Invaild session");
+		status = QDF_STATUS_E_FAILURE;
 		goto rrm_send_scan_results_done;
 	}
 
@@ -546,24 +553,17 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 		 * of connected AP in scan results is not updated and can
 		 * not meet "pScanResult->timer >= RRM_scan_timer".
 		 */
-		tCsrRoamSession *session;
 		uint8_t is_conn_bss_found = false;
 
-		if (scan_type == eSIR_PASSIVE_SCAN) {
-			session = CSR_GET_SESSION(mac_ctx, session_id);
-			if (session) {
-				if (csr_is_conn_state_connected_infra(mac_ctx,
-				    session_id) &&
-				    (NULL != session->pConnectBssDesc) &&
-				    (csr_is_duplicate_bss_description(mac_ctx,
-				     &scan_results->BssDescriptor,
-				     session->pConnectBssDesc))) {
-					is_conn_bss_found = true;
-					sme_debug("Connected BSS in scan results");
-				}
-			}
+		if ((scan_type == eSIR_PASSIVE_SCAN) &&
+		     (!qdf_mem_cmp(scan_results->BssDescriptor.bssId,
+		      session->pConnectBssDesc->bssId,
+		      sizeof(struct qdf_mac_addr)))) {
+			is_conn_bss_found = true;
+			sme_debug("Connected BSS in scan results");
 		}
-		next_result = sme_scan_result_get_next(mac_ctx, result_handle);
+		next_result = sme_scan_result_get_next(mac_handle,
+						       result_handle);
 		sme_debug("Scan res timer:%lu, rrm scan timer:%llu",
 				scan_results->timer, rrm_scan_timer);
 		if ((scan_results->timer >= rrm_scan_timer) ||
@@ -578,7 +578,6 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 		if (counter >= num_scan_results)
 			break;
 	}
-	qdf_mem_free(roam_info);
 	/*
 	 * The beacon report should be sent whether the counter is zero or
 	 * non-zero. There might be a few scan results in the cache but not
@@ -607,18 +606,19 @@ static QDF_STATUS sme_rrm_send_scan_result(tpAniSirGlobal mac_ctx,
 rrm_send_scan_results_done:
 	if (scanresults_arr)
 		qdf_mem_free(scanresults_arr);
-
-	sme_scan_result_purge(mac_ctx, result_handle);
+	qdf_mem_free(roam_info);
+	sme_scan_result_purge(result_handle);
 
 	return status;
 }
 
+
 /**
  * sme_rrm_scan_request_callback() -Sends the beacon report xmit to PE
- * @halHandle - Pointer to the Hal Handle.
- * @pContext - Pointer to the data context.
- * @scanId - Scan ID.
- * @status - CSR Status.
+ * @mac_handle: Opaque handle to the MAC context
+ * @sessionId: session id
+ * @scanId: Scan ID.
+ * @status: CSR Status.
  *
  * The sme module calls this callback function once it finish the scan request
  * and this function send the beacon report xmit to PE and starts a timer of
@@ -626,17 +626,14 @@ rrm_send_scan_results_done:
  *
  * Return : 0 for success, non zero for failure
  */
-
-static QDF_STATUS sme_rrm_scan_request_callback(tHalHandle halHandle,
-						void *pContext,
+static QDF_STATUS sme_rrm_scan_request_callback(mac_handle_t mac_handle,
 						uint8_t sessionId,
 						uint32_t scanId,
 						eCsrScanStatus status)
 {
-
 	uint16_t interval;
-	tpAniSirGlobal pMac = (tpAniSirGlobal) halHandle;
-	tpRrmSMEContext pSmeRrmContext = &pMac->rrm.rrmSmeContext;
+	struct mac_context *mac = MAC_CONTEXT(mac_handle);
+	tpRrmSMEContext pSmeRrmContext = &mac->rrm.rrmSmeContext;
 	uint32_t time_tick;
 
 	/* if any more channels are pending, start a timer of a random value
@@ -644,7 +641,7 @@ static QDF_STATUS sme_rrm_scan_request_callback(tHalHandle halHandle,
 	 */
 	if ((pSmeRrmContext->currentIndex + 1) <
 	    pSmeRrmContext->channelList.numOfChannels) {
-		sme_rrm_send_scan_result(pMac, 1,
+		sme_rrm_send_scan_result(mac, 1,
 					 &pSmeRrmContext->channelList.
 					 ChannelList[pSmeRrmContext
 					->currentIndex],
@@ -666,7 +663,7 @@ static QDF_STATUS sme_rrm_scan_request_callback(tHalHandle halHandle,
 		/* Done with the measurement. Clean up all context and send a
 		 * message to PE with measurement done flag set.
 		 */
-		sme_rrm_send_scan_result(pMac, 1,
+		sme_rrm_send_scan_result(mac, 1,
 					 &pSmeRrmContext->channelList.
 					 ChannelList[pSmeRrmContext
 					->currentIndex],
@@ -680,6 +677,38 @@ static QDF_STATUS sme_rrm_scan_request_callback(tHalHandle halHandle,
 	return QDF_STATUS_SUCCESS;
 }
 
+static void sme_rrm_scan_event_callback(struct wlan_objmgr_vdev *vdev,
+			struct scan_event *event, void *arg)
+{
+	uint32_t scan_id;
+	uint8_t session_id;
+	eCsrScanStatus scan_status = eCSR_SCAN_FAILURE;
+	mac_handle_t mac_handle;
+	bool success = false;
+
+	session_id = wlan_vdev_get_id(vdev);
+	scan_id = event->scan_id;
+	mac_handle = cds_get_context(QDF_MODULE_ID_SME);
+	if (!mac_handle) {
+		QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_FATAL,
+			  FL("invalid h_hal"));
+		return;
+	}
+
+	qdf_mtrace(QDF_MODULE_ID_SCAN, QDF_MODULE_ID_SME, event->type,
+		   event->vdev_id, event->scan_id);
+
+	if (!util_is_scan_completed(event, &success))
+		return;
+
+	if (success)
+		scan_status = eCSR_SCAN_SUCCESS;
+
+	sme_rrm_scan_request_callback(mac_handle, session_id,
+				      scan_id, scan_status);
+}
+
+
 /**
  * sme_rrm_issue_scan_req() - To issue rrm scan request
  * @mac_ctx: pointer to mac context
@@ -688,7 +717,7 @@ static QDF_STATUS sme_rrm_scan_request_callback(tHalHandle halHandle,
  *
  * Return: QDF_STATUS
  */
-static QDF_STATUS sme_rrm_issue_scan_req(tpAniSirGlobal mac_ctx)
+static QDF_STATUS sme_rrm_issue_scan_req(struct mac_context *mac_ctx)
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	tpRrmSMEContext sme_rrm_ctx = &mac_ctx->rrm.rrmSmeContext;
@@ -719,66 +748,74 @@ static QDF_STATUS sme_rrm_issue_scan_req(tpAniSirGlobal mac_ctx)
 
 	if ((eSIR_ACTIVE_SCAN == scan_type) ||
 			(eSIR_PASSIVE_SCAN == scan_type)) {
-		tCsrScanRequest scan_req;
-		uint32_t scan_req_id;
 		uint32_t max_chan_time;
 		uint64_t current_time;
+		struct scan_start_request *req;
+		struct wlan_objmgr_vdev *vdev;
+		uint32_t chan_num;
 
-		qdf_mem_zero(&scan_req, sizeof(scan_req));
-		/* set scan_type, active or passive */
-		scan_req.bcnRptReqScan = true;
-		scan_req.scanType = scan_type;
-		qdf_mem_copy(&scan_req.bssid.bytes, sme_rrm_ctx->bssId,
+		req = qdf_mem_malloc(sizeof(*req));
+		if (!req) {
+			status = QDF_STATUS_E_NOMEM;
+			goto free_ch_lst;
+		}
+
+		vdev = wlan_objmgr_get_vdev_by_id_from_psoc(
+						mac_ctx->psoc,
+						session_id,
+						WLAN_LEGACY_SME_ID);
+		if (!vdev) {
+			sme_err("VDEV is null %d", session_id);
+			status = QDF_STATUS_E_INVAL;
+			qdf_mem_free(req);
+			goto free_ch_lst;
+		}
+		ucfg_scan_init_default_params(vdev, req);
+		req->scan_req.scan_id = ucfg_scan_get_scan_id(mac_ctx->psoc);
+		req->scan_req.scan_f_passive =
+				(scan_type == eSIR_ACTIVE_SCAN) ? false : true;
+		req->scan_req.vdev_id = wlan_vdev_get_id(vdev);
+		req->scan_req.scan_req_id = sme_rrm_ctx->req_id;
+		qdf_mem_copy(&req->scan_req.bssid_list[0], sme_rrm_ctx->bssId,
 				QDF_MAC_ADDR_SIZE);
+		req->scan_req.num_bssid = 1;
 		if (sme_rrm_ctx->ssId.length) {
-			scan_req.SSIDs.numOfSSIDs = 1;
-			scan_req.SSIDs.SSIDList =
-				(tCsrSSIDInfo *)qdf_mem_malloc(
-					sizeof(tCsrSSIDInfo));
-			if (NULL == scan_req.SSIDs.SSIDList) {
-				sme_err("qdf_mem_malloc failed");
-				return QDF_STATUS_E_NOMEM;
-			}
-			scan_req.SSIDs.SSIDList->SSID.length =
-				sme_rrm_ctx->ssId.length;
-			qdf_mem_copy(scan_req.SSIDs.SSIDList->SSID.ssId,
+			req->scan_req.num_ssids = 1;
+			qdf_mem_copy(&req->scan_req.ssid[0].ssid,
 					sme_rrm_ctx->ssId.ssId,
 					sme_rrm_ctx->ssId.length);
+			req->scan_req.ssid[0].length = sme_rrm_ctx->ssId.length;
 		}
 
 		/*
 		 * set min and max channel time
 		 * sme_rrm_ctx->duration; Dont use min timeout.
 		 */
-		scan_req.minChnTime = 0;
 		if (eRRM_MSG_SOURCE_ESE_UPLOAD == sme_rrm_ctx->msgSource ||
 			eRRM_MSG_SOURCE_LEGACY_ESE == sme_rrm_ctx->msgSource)
-			scan_req.maxChnTime = sme_rrm_ctx->duration[
-						sme_rrm_ctx->currentIndex];
+			max_chan_time =
+			      sme_rrm_ctx->duration[sme_rrm_ctx->currentIndex];
 		else
-			scan_req.maxChnTime = sme_rrm_ctx->duration[0];
+			max_chan_time = sme_rrm_ctx->duration[0];
 
-		sme_debug(FL("Scan Type(%d) Max Dwell Time(%d)"),
-				scan_req.scanType, scan_req.maxChnTime);
 		/*
-		 * Use gPassive/gActiveMaxChannelTime if maxChanTime is less
-		 * than default.
+		 * Use max_chan_time if max_chan_time is more than def value
+		 * depending on type of scan.
 		 */
-		if (eSIR_ACTIVE_SCAN == scan_type)
-			max_chan_time =
-				mac_ctx->roam.configParam.nActiveMaxChnTime;
-		else
-			max_chan_time =
-				mac_ctx->roam.configParam.nPassiveMaxChnTime;
-
-		if (scan_req.maxChnTime < max_chan_time) {
-			scan_req.maxChnTime = max_chan_time;
-			sme_debug(
-				FL("Setting default max %d ChanTime"),
-				max_chan_time);
+		if (req->scan_req.scan_f_passive) {
+			if (max_chan_time > req->scan_req.dwell_time_passive)
+				req->scan_req.dwell_time_passive =
+								max_chan_time;
+			sme_debug("Passive Max Dwell Time(%d)",
+				  req->scan_req.dwell_time_passive);
+		} else {
+			if (max_chan_time > req->scan_req.dwell_time_active)
+				req->scan_req.dwell_time_active = max_chan_time;
+			sme_debug("Active Max Dwell Time(%d)",
+				  req->scan_req.dwell_time_active);
 		}
 
-		scan_req.scan_adaptive_dwell_mode = WMI_DWELL_MODE_STATIC;
+		req->scan_req.adaptive_dwell_time_mode = SCAN_DWELL_MODE_STATIC;
 		/*
 		 * For RRM scans timing is very important especially when the
 		 * request is for limited channels. There is no need for
@@ -795,35 +832,27 @@ static QDF_STATUS sme_rrm_issue_scan_req(tpAniSirGlobal mac_ctx)
 				sme_rrm_ctx->channelList.numOfChannels);
 		if ((abs(current_time - rrm_scan_timer) > 1000) &&
 				(sme_rrm_ctx->channelList.numOfChannels == 1)) {
-			scan_req.restTime = 1;
-			scan_req.min_rest_time = 1;
-			scan_req.idle_time = 1;
+			req->scan_req.max_rest_time = 1;
+			req->scan_req.min_rest_time = 1;
+			req->scan_req.idle_time = 1;
 		}
 
 		rrm_scan_timer = (uint64_t)qdf_mc_timer_get_system_time();
 
-		/* set BSSType to default type */
-		scan_req.BSSType = eCSR_BSS_TYPE_ANY;
-		/*Scan all the channels */
-		scan_req.ChannelInfo.numOfChannels = 1;
-		scan_req.ChannelInfo.ChannelList =
-			&sme_rrm_ctx->channelList.ChannelList[
-				sme_rrm_ctx->currentIndex];
-		sme_debug(FL("Duration %d On channel %d dwellmode %d"),
-			scan_req.maxChnTime,
-			sme_rrm_ctx->channelList.ChannelList[
-			sme_rrm_ctx->currentIndex],
-			scan_req.scan_adaptive_dwell_mode);
-		scan_req.requestType = eCSR_SCAN_RRM;
-		wma_get_scan_id(&scan_req_id);
-		scan_req.scan_id = scan_req_id;
-		scan_req.scan_requestor_id = USER_SCAN_REQUESTOR_ID;
-		status = sme_scan_request(mac_ctx, (uint8_t) session_id,
-					&scan_req,
-					&sme_rrm_scan_request_callback, NULL);
-
-		if (sme_rrm_ctx->ssId.length)
-			qdf_mem_free(scan_req.SSIDs.SSIDList);
+		/* set requestType to full scan */
+		req->scan_req.chan_list.num_chan = 1;
+		chan_num = sme_rrm_ctx->channelList.ChannelList[
+			   sme_rrm_ctx->currentIndex];
+		req->scan_req.chan_list.chan[0].freq =
+			wlan_chan_to_freq(chan_num);
+		sme_debug("Duration %d On channel %d freq %d",
+				req->scan_req.dwell_time_active,
+				chan_num,
+				req->scan_req.chan_list.chan[0].freq);
+		status = ucfg_scan_start(req);
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_LEGACY_SME_ID);
+		if (QDF_IS_STATUS_ERROR(status))
+			goto free_ch_lst;
 
 		return status;
 	} else if (eSIR_BEACON_TABLE == scan_type) {
@@ -875,40 +904,8 @@ free_ch_lst:
 }
 
 /**
- * sme_rrm_calculate_total_scan_time() - calculate total time req for
- * scan for all channels
- * @mac_ctx: The handle returned by mac_open.
- *
- * Return: total rrm scan time
- */
-static uint32_t sme_rrm_calculate_total_scan_time(tpAniSirGlobal mac_ctx)
-{
-	uint32_t dwell_time_active;
-	uint16_t interval;
-	tpRrmSMEContext pSmeRrmContext = &mac_ctx->rrm.rrmSmeContext;
-	uint8_t num_channels;
-	uint32_t rrm_scan_time = 0;
-
-	num_channels = pSmeRrmContext->channelList.numOfChannels;
-
-	interval = pSmeRrmContext->randnIntvl + 10;
-
-	dwell_time_active = pSmeRrmContext->duration[0];
-
-	/*
-	 * Add 1 sec extra in actual total rrm scan time
-	 * to accommodate any delay
-	 */
-	if (num_channels)
-		rrm_scan_time = ((num_channels * dwell_time_active) +
-				 ((num_channels - 1) * interval) + 1000);
-
-	return rrm_scan_time;
-}
-
-/**
  * sme_rrm_process_beacon_report_req_ind() -Process beacon report request
- * @pMac:- Global Mac structure
+ * @mac:- Global Mac structure
  * @pMsgBuf:- a pointer to a buffer that maps to various structures base
  *                  on the message type.The beginning of the buffer can always
  *                  map to tSirSmeRsp.
@@ -918,47 +915,15 @@ static uint32_t sme_rrm_calculate_total_scan_time(tpAniSirGlobal mac_ctx)
  *
  * Return : QDF_STATUS_SUCCESS - Validation is successful.
  */
-QDF_STATUS sme_rrm_process_beacon_report_req_ind(tpAniSirGlobal pMac,
+QDF_STATUS sme_rrm_process_beacon_report_req_ind(struct mac_context *mac,
 						void *pMsgBuf)
 {
 	tpSirBeaconReportReqInd pBeaconReq = (tpSirBeaconReportReqInd) pMsgBuf;
-	tpRrmSMEContext pSmeRrmContext = &pMac->rrm.rrmSmeContext;
+	tpRrmSMEContext pSmeRrmContext = &mac->rrm.rrmSmeContext;
 	uint32_t len = 0, i = 0;
-	uint8_t temp = 0;
-	uint32_t total_rrm_scan_time;
-	uint8_t *country;
-	uint32_t session_id;
-	tCsrRoamSession *session;
-	struct qdf_mac_addr req_bssid;
-	QDF_STATUS status;
-
-	qdf_mem_copy(&req_bssid.bytes, pBeaconReq->bssId, sizeof(tSirMacAddr));
-	status = csr_roam_get_session_id_from_bssid(pMac,
-						    &req_bssid,
-						    &session_id);
-	if (QDF_IS_STATUS_ERROR(status)) {
-		sme_err("sme session ID not found for bssid = " MAC_ADDRESS_STR,
-			MAC_ADDR_ARRAY(pBeaconReq->bssId));
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	session = CSR_GET_SESSION(pMac, session_id);
-	if (!session) {
-		sme_err("Invalid session id %d", session_id);
-		return QDF_STATUS_E_FAILURE;
-	}
-
-	if (session->connectedProfile.countryCode[0])
-		country = session->connectedProfile.countryCode;
-	else
-		country = pMac->scan.countryCodeCurrent;
 
 	sme_debug("Received Beacon report request ind Channel = %d",
 		pBeaconReq->channelInfo.channelNum);
-
-	sme_debug("Request Reg class %d, AP's country code %c%c 0x%x",
-		  pBeaconReq->channelInfo.regulatoryClass,
-		  country[0], country[1], country[2]);
 
 	if (pBeaconReq->channelList.numChannels >
 	    SIR_ESE_MAX_MEAS_IE_REQS) {
@@ -973,29 +938,14 @@ QDF_STATUS sme_rrm_process_beacon_report_req_ind(tpAniSirGlobal pMac,
 	    ((pBeaconReq->channelInfo.channelNum == 255)
 	     && (pBeaconReq->channelList.numChannels == 0))) {
 		/* Add all the channel in the regulatory domain. */
-		wlan_cfg_get_str_len(pMac, WNI_CFG_VALID_CHANNEL_LIST, &len);
+		wlan_cfg_get_str_len(mac, WNI_CFG_VALID_CHANNEL_LIST, &len);
 		pSmeRrmContext->channelList.ChannelList = qdf_mem_malloc(len);
-		if (pSmeRrmContext->channelList.ChannelList == NULL) {
-			sme_err("qdf_mem_malloc failed");
+		if (!pSmeRrmContext->channelList.ChannelList)
 			return QDF_STATUS_E_NOMEM;
-		}
-		csr_get_cfg_valid_channels(pMac, pSmeRrmContext->channelList.
-					ChannelList, &len);
-		/* List all the channels in the requested RC */
-		cds_reg_dmn_print_channels_in_opclass(country,
-				pBeaconReq->channelInfo.regulatoryClass);
 
-		for (i = 0; i < len; i++) {
-			if (cds_reg_dmn_get_opclass_from_channel(country,
-			    pSmeRrmContext->channelList.ChannelList[i],
-			    BWALL) ==
-			    pBeaconReq->channelInfo.regulatoryClass) {
-				pSmeRrmContext->channelList.ChannelList[temp] =
-				  pSmeRrmContext->channelList.ChannelList[i];
-				temp++;
-			}
-		}
-		pSmeRrmContext->channelList.numOfChannels = (uint8_t) temp;
+		csr_get_cfg_valid_channels(mac, pSmeRrmContext->channelList.
+					ChannelList, &len);
+		pSmeRrmContext->channelList.numOfChannels = (uint8_t) len;
 	} else {
 		len = 0;
 		pSmeRrmContext->channelList.numOfChannels = 0;
@@ -1010,14 +960,12 @@ QDF_STATUS sme_rrm_process_beacon_report_req_ind(tpAniSirGlobal pMac,
 		len += pBeaconReq->channelList.numChannels;
 
 		pSmeRrmContext->channelList.ChannelList = qdf_mem_malloc(len);
-		if (pSmeRrmContext->channelList.ChannelList == NULL) {
-			sme_err("qdf_mem_malloc failed");
+		if (!pSmeRrmContext->channelList.ChannelList)
 			return QDF_STATUS_E_NOMEM;
-		}
 
 		if (pBeaconReq->channelInfo.channelNum != 255) {
 			if (csr_roam_is_channel_valid
-				    (pMac, pBeaconReq->channelInfo.channelNum))
+				    (mac, pBeaconReq->channelInfo.channelNum))
 				pSmeRrmContext->channelList.
 				ChannelList[pSmeRrmContext->channelList.
 					    numOfChannels++] =
@@ -1028,7 +976,7 @@ QDF_STATUS sme_rrm_process_beacon_report_req_ind(tpAniSirGlobal pMac,
 		}
 
 		for (i = 0; i < pBeaconReq->channelList.numChannels; i++) {
-			if (csr_roam_is_channel_valid(pMac, pBeaconReq->
+			if (csr_roam_is_channel_valid(mac, pBeaconReq->
 					channelList.channelNumber[i])) {
 				pSmeRrmContext->channelList.
 					ChannelList[pSmeRrmContext->channelList.
@@ -1069,13 +1017,7 @@ QDF_STATUS sme_rrm_process_beacon_report_req_ind(tpAniSirGlobal pMac,
 		pSmeRrmContext->token, pSmeRrmContext->regClass,
 		pSmeRrmContext->randnIntvl, pSmeRrmContext->msgSource);
 
-	total_rrm_scan_time = sme_rrm_calculate_total_scan_time(pMac);
-
-	if (total_rrm_scan_time)
-		qdf_wake_lock_timeout_acquire(&pSmeRrmContext->scan_wake_lock,
-					      total_rrm_scan_time);
-
-	return sme_rrm_issue_scan_req(pMac);
+	return sme_rrm_issue_scan_req(mac);
 }
 
 /**
@@ -1088,7 +1030,7 @@ QDF_STATUS sme_rrm_process_beacon_report_req_ind(tpAniSirGlobal pMac,
  *
  * Return: QDF_STATUS_SUCCESS - Validation is successful.
  */
-QDF_STATUS sme_rrm_neighbor_report_request(tpAniSirGlobal pMac, uint8_t
+QDF_STATUS sme_rrm_neighbor_report_request(struct mac_context *mac, uint8_t
 					sessionId, tpRrmNeighborReq
 					pNeighborReq,
 					tpRrmNeighborRspCallbackInfo
@@ -1096,32 +1038,29 @@ QDF_STATUS sme_rrm_neighbor_report_request(tpAniSirGlobal pMac, uint8_t
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
 	tpSirNeighborReportReqInd pMsg;
-	tCsrRoamSession *pSession;
+	struct csr_roam_session *pSession;
 
-	sme_debug(
-		FL("Request to send Neighbor report request received "));
-	if (!CSR_IS_SESSION_VALID(pMac, sessionId)) {
+	sme_debug("Request to send Neighbor report request received ");
+	if (!CSR_IS_SESSION_VALID(mac, sessionId)) {
 		sme_err("Invalid session %d", sessionId);
 		return QDF_STATUS_E_INVAL;
 	}
-	pSession = CSR_GET_SESSION(pMac, sessionId);
+	pSession = CSR_GET_SESSION(mac, sessionId);
 
 	/* If already a report is pending, return failure */
 	if (true ==
-	    pMac->rrm.rrmSmeContext.neighborReqControlInfo.
+	    mac->rrm.rrmSmeContext.neighborReqControlInfo.
 	    isNeighborRspPending) {
 		sme_err("Neighbor request already pending.. Not allowed");
 		return QDF_STATUS_E_AGAIN;
 	}
 
 	pMsg = qdf_mem_malloc(sizeof(tSirNeighborReportReqInd));
-	if (NULL == pMsg) {
-		sme_err("Unable to allocate memory for Neighbor request");
+	if (!pMsg)
 		return QDF_STATUS_E_NOMEM;
-	}
 
-	rrm_ll_purge_neighbor_cache(pMac,
-			    &pMac->rrm.rrmSmeContext.neighborReportCache);
+	rrm_ll_purge_neighbor_cache(mac,
+			    &mac->rrm.rrmSmeContext.neighborReportCache);
 
 	pMsg->messageType = eWNI_SME_NEIGHBOR_REPORT_REQ_IND;
 	pMsg->length = sizeof(tSirNeighborReportReqInd);
@@ -1130,23 +1069,23 @@ QDF_STATUS sme_rrm_neighbor_report_request(tpAniSirGlobal pMac, uint8_t
 	pMsg->noSSID = pNeighborReq->no_ssid;
 	qdf_mem_copy(&pMsg->ucSSID, &pNeighborReq->ssid, sizeof(tSirMacSSid));
 
-	status = cds_send_mb_message_to_mac(pMsg);
+	status = umac_send_mb_message_to_mac(pMsg);
 	if (status != QDF_STATUS_SUCCESS)
 		return QDF_STATUS_E_FAILURE;
 
 	/* Neighbor report request message sent successfully to PE.
 	 * Now register the callbacks
 	 */
-	pMac->rrm.rrmSmeContext.neighborReqControlInfo.neighborRspCallbackInfo.
+	mac->rrm.rrmSmeContext.neighborReqControlInfo.neighborRspCallbackInfo.
 	neighborRspCallback = callbackInfo->neighborRspCallback;
-	pMac->rrm.rrmSmeContext.neighborReqControlInfo.neighborRspCallbackInfo.
+	mac->rrm.rrmSmeContext.neighborReqControlInfo.neighborRspCallbackInfo.
 	neighborRspCallbackContext =
 		callbackInfo->neighborRspCallbackContext;
-	pMac->rrm.rrmSmeContext.neighborReqControlInfo.isNeighborRspPending =
+	mac->rrm.rrmSmeContext.neighborReqControlInfo.isNeighborRspPending =
 		true;
 
 	/* Start neighbor response wait timer now */
-	qdf_mc_timer_start(&pMac->rrm.rrmSmeContext.neighborReqControlInfo.
+	qdf_mc_timer_start(&mac->rrm.rrmSmeContext.neighborReqControlInfo.
 			   neighborRspWaitTimer, callbackInfo->timeout);
 
 	return QDF_STATUS_SUCCESS;
@@ -1165,7 +1104,7 @@ QDF_STATUS sme_rrm_neighbor_report_request(tpAniSirGlobal pMac, uint8_t
  * Return: void
  */
 static void
-rrm_calculate_neighbor_ap_roam_score(tpAniSirGlobal mac_ctx,
+rrm_calculate_neighbor_ap_roam_score(struct mac_context *mac_ctx,
 				tpRrmNeighborReportDesc nbr_report_desc)
 {
 	tpSirNeighborBssDescripton nbr_bss_desc;
@@ -1248,10 +1187,10 @@ check_11r_assoc:
  *
  * Return: void.
  */
-static void rrm_store_neighbor_rpt_by_roam_score(tpAniSirGlobal pMac,
+static void rrm_store_neighbor_rpt_by_roam_score(struct mac_context *mac,
 				tpRrmNeighborReportDesc pNeighborReportDesc)
 {
-	tpRrmSMEContext pSmeRrmContext = &pMac->rrm.rrmSmeContext;
+	tpRrmSMEContext pSmeRrmContext = &mac->rrm.rrmSmeContext;
 	tListElem *pEntry;
 	tRrmNeighborReportDesc *pTempNeighborReportDesc;
 
@@ -1309,7 +1248,7 @@ static void rrm_store_neighbor_rpt_by_roam_score(tpAniSirGlobal pMac,
 /**
  * sme_rrm_process_neighbor_report() -Process the Neighbor report received
  *                                                     from PE
- * @pMac - Global MAC structure
+ * @mac - Global MAC structure
  * @pMsgBuf - a pointer to a buffer that maps to various structures base
  *                  on the message type.
  *                  The beginning of the buffer can always map to tSirSmeRsp.
@@ -1317,7 +1256,7 @@ static void rrm_store_neighbor_rpt_by_roam_score(tpAniSirGlobal pMac,
  *
  * Return: QDF_STATUS_SUCCESS - Validation is successful
  */
-static QDF_STATUS sme_rrm_process_neighbor_report(tpAniSirGlobal pMac,
+static QDF_STATUS sme_rrm_process_neighbor_report(struct mac_context *mac,
 						  void *pMsgBuf)
 {
 	QDF_STATUS status = QDF_STATUS_SUCCESS;
@@ -1329,15 +1268,15 @@ static QDF_STATUS sme_rrm_process_neighbor_report(tpAniSirGlobal pMac,
 
 	/* Get the session id */
 	status =
-		csr_roam_get_session_id_from_bssid(pMac,
+		csr_roam_get_session_id_from_bssid(mac,
 			   (struct qdf_mac_addr *) pNeighborRpt->bssId,
 			   &sessionId);
 	if (QDF_IS_STATUS_SUCCESS(status)) {
 #ifdef FEATURE_WLAN_ESE
 		/* Clear the cache for ESE. */
-		if (csr_roam_is_ese_assoc(pMac, sessionId)) {
-			rrm_ll_purge_neighbor_cache(pMac,
-						    &pMac->rrm.rrmSmeContext.
+		if (csr_roam_is_ese_assoc(mac, sessionId)) {
+			rrm_ll_purge_neighbor_cache(mac,
+						    &mac->rrm.rrmSmeContext.
 						    neighborReportCache);
 		}
 #endif
@@ -1346,8 +1285,7 @@ static QDF_STATUS sme_rrm_process_neighbor_report(tpAniSirGlobal pMac,
 	for (i = 0; i < pNeighborRpt->numNeighborReports; i++) {
 		pNeighborReportDesc =
 			qdf_mem_malloc(sizeof(tRrmNeighborReportDesc));
-		if (NULL == pNeighborReportDesc) {
-			sme_err("Failed to alloc memory for RRM report desc");
+		if (!pNeighborReportDesc) {
 			status = QDF_STATUS_E_NOMEM;
 			goto end;
 
@@ -1355,8 +1293,7 @@ static QDF_STATUS sme_rrm_process_neighbor_report(tpAniSirGlobal pMac,
 
 		pNeighborReportDesc->pNeighborBssDescription =
 			qdf_mem_malloc(sizeof(tSirNeighborBssDescription));
-		if (NULL == pNeighborReportDesc->pNeighborBssDescription) {
-			sme_err("Failed to alloc mem for RRM BSS Description");
+		if (!pNeighborReportDesc->pNeighborBssDescription) {
 			qdf_mem_free(pNeighborReportDesc);
 			status = QDF_STATUS_E_NOMEM;
 			goto end;
@@ -1365,16 +1302,15 @@ static QDF_STATUS sme_rrm_process_neighbor_report(tpAniSirGlobal pMac,
 			     &pNeighborRpt->sNeighborBssDescription[i],
 			     sizeof(tSirNeighborBssDescription));
 
-		sme_debug(
-			"Received neighbor report with Neighbor BSSID: "
+		sme_debug("Received neighbor report with Neighbor BSSID: "
 			MAC_ADDRESS_STR,
 			MAC_ADDR_ARRAY(
 			       pNeighborRpt->sNeighborBssDescription[i].bssId));
 
-		rrm_calculate_neighbor_ap_roam_score(pMac, pNeighborReportDesc);
+		rrm_calculate_neighbor_ap_roam_score(mac, pNeighborReportDesc);
 
 		if (pNeighborReportDesc->roamScore > 0) {
-			rrm_store_neighbor_rpt_by_roam_score(pMac,
+			rrm_store_neighbor_rpt_by_roam_score(mac,
 				     pNeighborReportDesc);
 		} else {
 			sme_err("Roam score of BSSID  " MAC_ADDRESS_STR
@@ -1390,16 +1326,16 @@ static QDF_STATUS sme_rrm_process_neighbor_report(tpAniSirGlobal pMac,
 	}
 end:
 
-	if (!csr_ll_count(&pMac->rrm.rrmSmeContext.neighborReportCache))
+	if (!csr_ll_count(&mac->rrm.rrmSmeContext.neighborReportCache))
 		qdf_status = QDF_STATUS_E_FAILURE;
 
-	rrm_indicate_neighbor_report_result(pMac, qdf_status);
+	rrm_indicate_neighbor_report_result(mac, qdf_status);
 	return status;
 }
 
 /**
  * sme_rrm_msg_processor()-Process RRM message
- * @pMac - Pointer to the global MAC parameter structure.
+ * @mac - Pointer to the global MAC parameter structure.
  * @msg_type - the type of msg passed by PE as defined in wni_api.h
  * @pMsgBuf - a pointer to a buffer that maps to various structures base
  *                  on the message type.
@@ -1409,28 +1345,23 @@ end:
  *
  * Return: QDF_STATUS_SUCCESS - Validation is successful.
  */
-QDF_STATUS sme_rrm_msg_processor(tpAniSirGlobal pMac, uint16_t msg_type,
+QDF_STATUS sme_rrm_msg_processor(struct mac_context *mac, uint16_t msg_type,
 				 void *pMsgBuf)
 {
-	QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_DEBUG,
-		  FL(" Msg = %d for RRM measurement"), msg_type);
+	sme_debug("Msg = %d for RRM measurement", msg_type);
 
 	/* switch on the msg type & make the state transition accordingly */
 	switch (msg_type) {
 	case eWNI_SME_NEIGHBOR_REPORT_IND:
-		sme_rrm_process_neighbor_report(pMac, pMsgBuf);
+		sme_rrm_process_neighbor_report(mac, pMsgBuf);
 		break;
 
 	case eWNI_SME_BEACON_REPORT_REQ_IND:
-		sme_rrm_process_beacon_report_req_ind(pMac, pMsgBuf);
+		sme_rrm_process_beacon_report_req_ind(mac, pMsgBuf);
 		break;
 
 	default:
-		/* err msg */
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-			  FL("sme_rrm_msg_processor:unknown msg type = %d"),
-			  msg_type);
-
+		sme_err("Unknown msg type: %d", msg_type);
 		break;
 	}
 
@@ -1439,7 +1370,7 @@ QDF_STATUS sme_rrm_msg_processor(tpAniSirGlobal pMac, uint16_t msg_type,
 
 /**
  * rrm_iter_meas_timer_handle() - Timer handler to handlet the timeout
- * @ pMac - The handle returned by mac_open.
+ * @ mac - The handle returned by mac_open.
  *
  * Timer handler to handlet the timeout condition when a specific BT
  * stop event does not come back, in which case to restore back the
@@ -1449,15 +1380,15 @@ QDF_STATUS sme_rrm_msg_processor(tpAniSirGlobal pMac, uint16_t msg_type,
  */
 static void rrm_iter_meas_timer_handle(void *userData)
 {
-	tpAniSirGlobal pMac = (tpAniSirGlobal) userData;
+	struct mac_context *mac = (struct mac_context *) userData;
 
 	sme_warn("Randomization timer expired...send on next channel");
 	/* Issue a scan req for next channel. */
-	sme_rrm_issue_scan_req(pMac);
+	sme_rrm_issue_scan_req(mac);
 }
 /**
  * rrm_neighbor_rsp_timeout_handler() - Timer handler to handlet the timeout
- * @pMac - The handle returned by mac_open.
+ * @mac - The handle returned by mac_open.
  *
  * Timer handler to handle the timeout condition when a neighbor request is sent
  * and no neighbor response is received from the AP
@@ -1466,41 +1397,54 @@ static void rrm_iter_meas_timer_handle(void *userData)
  */
 static void rrm_neighbor_rsp_timeout_handler(void *userData)
 {
-	tpAniSirGlobal pMac = (tpAniSirGlobal) userData;
+	struct mac_context *mac = (struct mac_context *) userData;
 
 	sme_warn("Neighbor Response timed out");
-	rrm_indicate_neighbor_report_result(pMac, QDF_STATUS_E_FAILURE);
+	rrm_indicate_neighbor_report_result(mac, QDF_STATUS_E_FAILURE);
+}
+
+/**
+ * rrm_change_default_config_param() - Changing default config param to new
+ * @mac - The handle returned by mac_open.
+ *
+ * Return: None
+ */
+static void rrm_change_default_config_param(struct mac_context *mac)
+{
+	mac->rrm.rrmSmeContext.rrmConfig.rrm_enabled =
+			mac->mlme_cfg->rrm_config.rrm_enabled;
+	mac->rrm.rrmSmeContext.rrmConfig.max_randn_interval =
+			mac->mlme_cfg->rrm_config.rrm_rand_interval;
+
+	qdf_mem_copy(&mac->rrm.rrmSmeContext.rrmConfig.rm_capability,
+		     &mac->mlme_cfg->rrm_config.rm_capability,
+		     RMENABLEDCAP_MAX_LEN);
 }
 
 /**
  * rrm_open() - Initialze all RRM module
- * @ pMac: The handle returned by mac_open.
+ * @ mac: The handle returned by mac_open.
  *
  * Initialze all RRM module.
  *
  * Return: QDF_STATUS
  */
-QDF_STATUS rrm_open(tpAniSirGlobal pMac)
+QDF_STATUS rrm_open(struct mac_context *mac)
 {
 
 	QDF_STATUS qdf_status;
-	tpRrmSMEContext pSmeRrmContext = &pMac->rrm.rrmSmeContext;
+	tpRrmSMEContext pSmeRrmContext = &mac->rrm.rrmSmeContext;
 	QDF_STATUS qdf_ret_status = QDF_STATUS_SUCCESS;
 
 	pSmeRrmContext->rrmConfig.max_randn_interval = 50;        /* ms */
-	qdf_wake_lock_create(&pSmeRrmContext->scan_wake_lock,
-			     "wlan_rrm_scan_wl");
 
 	qdf_status = qdf_mc_timer_init(&pSmeRrmContext->IterMeasTimer,
 				       QDF_TIMER_TYPE_SW,
 				       rrm_iter_meas_timer_handle,
-					(void *)pMac);
+					(void *)mac);
 
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-			  "rrm_open: Fail to init timer");
-
+		sme_err("Fail to init measurement timer");
 		return QDF_STATUS_E_FAILURE;
 	}
 
@@ -1508,32 +1452,29 @@ QDF_STATUS rrm_open(tpAniSirGlobal pMac)
 		qdf_mc_timer_init(&pSmeRrmContext->neighborReqControlInfo.
 				  neighborRspWaitTimer, QDF_TIMER_TYPE_SW,
 				  rrm_neighbor_rsp_timeout_handler,
-					(void *)pMac);
+					(void *)mac);
 
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-			  "rrm_open: Fail to init timer");
-
+		sme_err("Fail to init neighbor rsp wait timer");
 		return QDF_STATUS_E_FAILURE;
 	}
 
 	pSmeRrmContext->neighborReqControlInfo.isNeighborRspPending = false;
 
-	qdf_ret_status =
-		csr_ll_open(pMac->hHdd, &pSmeRrmContext->neighborReportCache);
+	qdf_ret_status = csr_ll_open(&pSmeRrmContext->neighborReportCache);
 	if (QDF_STATUS_SUCCESS != qdf_ret_status) {
-		QDF_TRACE(QDF_MODULE_ID_SME, QDF_TRACE_LEVEL_ERROR,
-			  "rrm_open: Fail to open neighbor cache result");
+		sme_err("Fail to open neighbor cache result");
 		return QDF_STATUS_E_FAILURE;
 	}
+
+	rrm_change_default_config_param(mac);
 
 	return QDF_STATUS_SUCCESS;
 }
 
 /**
  * rrm_close() - Release all RRM modules and their resources.
- * @pMac - The handle returned by mac_open.
+ * @mac - The handle returned by mac_open.
  *
  * Release all RRM modules and their resources.
  *
@@ -1542,11 +1483,11 @@ QDF_STATUS rrm_open(tpAniSirGlobal pMac)
  *           QDF_STATUS_SUCCESS  failure
  */
 
-QDF_STATUS rrm_close(tpAniSirGlobal pMac)
+QDF_STATUS rrm_close(struct mac_context *mac)
 {
 
 	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
-	tpRrmSMEContext pSmeRrmContext = &pMac->rrm.rrmSmeContext;
+	tpRrmSMEContext pSmeRrmContext = &mac->rrm.rrmSmeContext;
 
 	if (QDF_TIMER_STATE_RUNNING ==
 	    qdf_mc_timer_get_current_state(&pSmeRrmContext->IterMeasTimer)) {
@@ -1587,30 +1528,32 @@ QDF_STATUS rrm_close(tpAniSirGlobal pMac)
 
 	}
 
-	rrm_ll_purge_neighbor_cache(pMac, &pSmeRrmContext->neighborReportCache);
+	rrm_ll_purge_neighbor_cache(mac, &pSmeRrmContext->neighborReportCache);
 
 	csr_ll_close(&pSmeRrmContext->neighborReportCache);
-
-	qdf_wake_lock_destroy(&pSmeRrmContext->scan_wake_lock);
 
 	return qdf_status;
 
 }
 
-/**
- * rrm_change_default_config_param() - Changing default config param to new
- * @pMac - The handle returned by mac_open.
- * param  pRrmConfig - pointer to new rrm configs.
- *
- * Return: QDF_STATUS
- *           QDF_STATUS_SUCCESS  success
- */
-QDF_STATUS rrm_change_default_config_param(tpAniSirGlobal pMac,
-					   struct rrm_config_param *rrm_config)
+QDF_STATUS rrm_start(struct mac_context *mac_ctx)
 {
-	qdf_mem_copy(&pMac->rrm.rrmSmeContext.rrmConfig, rrm_config,
-		     sizeof(struct rrm_config_param));
+	tpRrmSMEContext smerrmctx = &mac_ctx->rrm.rrmSmeContext;
+
+	/* Register with scan component */
+	smerrmctx->req_id = ucfg_scan_register_requester(mac_ctx->psoc,
+					"RRM",
+					sme_rrm_scan_event_callback,
+					smerrmctx);
 
 	return QDF_STATUS_SUCCESS;
 }
 
+QDF_STATUS rrm_stop(struct mac_context *mac_ctx)
+{
+	tpRrmSMEContext smerrmctx = &mac_ctx->rrm.rrmSmeContext;
+
+	ucfg_scan_unregister_requester(mac_ctx->psoc, smerrmctx->req_id);
+
+	return QDF_STATUS_SUCCESS;
+}

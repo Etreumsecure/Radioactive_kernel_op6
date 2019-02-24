@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2019 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -49,7 +49,7 @@ static int pld_snoc_probe(struct device *dev)
 		goto out;
 	}
 
-	ret = pld_add_dev(pld_context, dev, PLD_BUS_TYPE_SNOC);
+	ret = pld_add_dev(pld_context, dev, NULL, PLD_BUS_TYPE_SNOC);
 	if (ret)
 		goto out;
 
@@ -238,14 +238,14 @@ static int pld_snoc_uevent(struct device *dev,
 		return -EINVAL;
 
 	if (!pld_context->ops->uevent)
-		return 0;
+		goto out;
 
 	if (!uevent)
 		return -EINVAL;
 
 	switch (uevent->uevent) {
 	case ICNSS_UEVENT_FW_CRASHED:
-		data.uevent = PLD_RECOVERY;
+		data.uevent = PLD_FW_CRASHED;
 		break;
 	case ICNSS_UEVENT_FW_DOWN:
 		if (uevent->data == NULL)
@@ -255,10 +255,11 @@ static int pld_snoc_uevent(struct device *dev,
 		data.fw_down.crashed = uevent_data->crashed;
 		break;
 	default:
-		return 0;
+		goto out;
 	}
 
 	pld_context->ops->uevent(dev, &data);
+out:
 	return 0;
 }
 
@@ -390,7 +391,16 @@ int pld_snoc_get_soc_info(struct device *dev, struct pld_soc_info *info)
 	if (0 != ret)
 		return ret;
 
-	memcpy(info, &icnss_info, sizeof(*info));
+	info->v_addr = icnss_info.v_addr;
+	info->p_addr = icnss_info.p_addr;
+	info->chip_id = icnss_info.chip_id;
+	info->chip_family = icnss_info.chip_family;
+	info->board_id = icnss_info.board_id;
+	info->soc_id = icnss_info.soc_id;
+	info->fw_version = icnss_info.fw_version;
+	strlcpy(info->fw_build_timestamp, icnss_info.fw_build_timestamp,
+		sizeof(info->fw_build_timestamp));
+
 	return 0;
 }
 #endif

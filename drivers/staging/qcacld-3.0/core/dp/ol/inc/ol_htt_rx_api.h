@@ -789,7 +789,6 @@ void htt_rx_msdu_desc_free(htt_pdev_handle htt_pdev, qdf_nbuf_t msdu);
  */
 void htt_rx_msdu_buff_replenish(htt_pdev_handle pdev);
 
-#ifndef CONFIG_HL_SUPPORT
 /**
  * @brief Add new MSDU buffers for the target to fill.
  * @details
@@ -805,6 +804,7 @@ void htt_rx_msdu_buff_replenish(htt_pdev_handle pdev);
  *
  * Return: number of buffers actually replenished
  */
+#ifndef CONFIG_HL_SUPPORT
 int htt_rx_msdu_buff_in_order_replenish(htt_pdev_handle pdev, uint32_t num);
 #else
 static inline
@@ -832,12 +832,24 @@ int htt_rx_msdu_buff_in_order_replenish(htt_pdev_handle pdev, uint32_t num)
  *      list, else operates on a cloned nbuf
  * @return network buffer handle to the MPDU
  */
+#if defined(FEATURE_MONITOR_MODE_SUPPORT)
+#if !defined(QCA6290_HEADERS_DEF) && !defined(QCA6390_HEADERS_DEF)
 qdf_nbuf_t
 htt_rx_restitch_mpdu_from_msdus(htt_pdev_handle pdev,
 				qdf_nbuf_t head_msdu,
 				struct ieee80211_rx_status *rx_status,
 				unsigned clone_not_reqd);
-
+#else
+static inline qdf_nbuf_t
+htt_rx_restitch_mpdu_from_msdus(htt_pdev_handle pdev,
+				qdf_nbuf_t head_msdu,
+				struct ieee80211_rx_status *rx_status,
+				unsigned clone_not_reqd)
+{
+	return NULL;
+}
+#endif
+#endif
 /**
  * @brief Return the sequence number of MPDUs to flush.
  * @param pdev - the HTT instance the rx data was received on
@@ -853,6 +865,7 @@ htt_rx_frag_ind_flush_seq_num_range(htt_pdev_handle pdev,
 				    qdf_nbuf_t rx_frag_ind_msg,
 				    uint16_t *seq_num_start, uint16_t *seq_num_end);
 
+#ifdef CONFIG_HL_SUPPORT
 /**
  * htt_rx_msdu_rx_desc_size_hl() - Return the HL rx desc size
  * @pdev: the HTT instance the rx data was received on.
@@ -861,6 +874,13 @@ htt_rx_frag_ind_flush_seq_num_range(htt_pdev_handle pdev,
  * Return: HL rx desc size
  */
 uint16_t htt_rx_msdu_rx_desc_size_hl(htt_pdev_handle pdev, void *msdu_desc);
+#else
+static inline
+uint16_t htt_rx_msdu_rx_desc_size_hl(htt_pdev_handle pdev, void *msdu_desc)
+{
+	return 0;
+}
+#endif
 
 /**
  * @brief populates vowext stats by processing RX desc.
@@ -869,7 +889,6 @@ uint16_t htt_rx_msdu_rx_desc_size_hl(htt_pdev_handle pdev, void *msdu_desc);
  */
 void htt_rx_get_vowext_stats(qdf_nbuf_t msdu, struct vow_extstats *vowstats);
 
-#ifndef CONFIG_HL_SUPPORT
 /**
  * @brief parses the offload message passed by the target.
  * @param pdev - pdev handle
@@ -891,9 +910,15 @@ htt_rx_offload_paddr_msdu_pop_ll(htt_pdev_handle pdev,
 				 int *tid,
 				 uint8_t *fw_desc,
 				 qdf_nbuf_t *head_buf, qdf_nbuf_t *tail_buf);
-#endif
 
 uint32_t htt_rx_amsdu_rx_in_order_get_pktlog(qdf_nbuf_t rx_ind_msg);
 
-int htt_rx_hash_smmu_map_update(struct htt_pdev_t *pdev, bool map);
+/**
+ * htt_rx_update_smmu_map() - set smmu map/unmap for rx buffers
+ * @pdev: htt pdev handle
+ * @map: value to set smmu map/unmap for rx buffers
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS htt_rx_update_smmu_map(struct htt_pdev_t *pdev, bool map);
 #endif /* _OL_HTT_RX_API__H_ */

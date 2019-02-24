@@ -25,6 +25,7 @@
 #include <lim_session.h>
 #include <cds_ieee80211_defines.h>
 #include <qdf_crypto.h>
+#include "qdf_util.h"
 
 #ifdef WLAN_FEATURE_FILS_SK
 
@@ -158,10 +159,6 @@ static uint8_t lim_get_tk_len(int cypher_suite)
 		return TK_LEN_TKIP;
 	case eSIR_ED_CCMP:
 		return TK_LEN_CCMP;
-	case eSIR_ED_GCMP:
-		return TK_LEN_GCMP;
-	case eSIR_ED_GCMP_256:
-		return TK_LEN_GCMP_256;
 	case eSIR_ED_AES_128_CMAC:
 		return TK_LEN_AES_128_CMAC;
 	default:
@@ -333,7 +330,7 @@ lim_default_hmac_sha256_kdf(uint8_t *secret, uint32_t secret_len,
  *
  * Return: remaining length
  */
-static uint32_t lim_process_fils_eap_tlv(tpPESession pe_session,
+static uint32_t lim_process_fils_eap_tlv(struct pe_session *pe_session,
 				uint8_t *wrapped_data, uint32_t data_len)
 {
 	struct fils_eap_tlv *tlv;
@@ -359,10 +356,9 @@ static uint32_t lim_process_fils_eap_tlv(tpPESession pe_session,
 		switch (tlv->type) {
 		case SIR_FILS_EAP_TLV_KEYNAME_NAI:
 			auth_info->keyname = qdf_mem_malloc(tlv->length);
-			if (!auth_info->keyname) {
-				pe_err("failed to alloc memory");
+			if (!auth_info->keyname)
 				return 0;
-			}
+
 			qdf_mem_copy(auth_info->keyname,
 				     tlv->data, tlv->length);
 			auth_info->keylength = tlv->length;
@@ -383,10 +379,9 @@ static uint32_t lim_process_fils_eap_tlv(tpPESession pe_session,
 			break;
 		case SIR_FILS_EAP_TLV_DOMAIN_NAME:
 			auth_info->domain_name = qdf_mem_malloc(tlv->length);
-			if (!auth_info->domain_name) {
-				pe_err("failed to alloc memory");
+			if (!auth_info->domain_name)
 				return 0;
-			}
+
 			qdf_mem_copy(auth_info->domain_name,
 				     tlv->data, tlv->length);
 			auth_info->domain_len = tlv->length;
@@ -444,7 +439,7 @@ static QDF_STATUS lim_generate_key_data(struct pe_fils_session *fils_info,
  *
  * Return: None
  */
-static void lim_generate_ap_key_auth(tpPESession pe_session)
+static void lim_generate_ap_key_auth(struct pe_session *pe_session)
 {
 	uint8_t *buf, *addr[1];
 	uint32_t len;
@@ -486,7 +481,7 @@ static void lim_generate_ap_key_auth(tpPESession pe_session)
  *
  * Return: None
  */
-static void lim_generate_key_auth(tpPESession pe_session)
+static void lim_generate_key_auth(struct pe_session *pe_session)
 {
 	uint8_t *buf, *addr[1];
 	uint32_t len;
@@ -533,7 +528,7 @@ static void lim_generate_key_auth(tpPESession pe_session)
  *
  * Return: None
  */
-static void lim_get_keys(tpPESession pe_session)
+static void lim_get_keys(struct pe_session *pe_session)
 {
 	uint8_t key_label[] = PTK_KEY_LABEL;
 	uint8_t *data;
@@ -556,10 +551,8 @@ static void lim_get_keys(tpPESession pe_session)
 
 	data_len = 2 * SIR_FILS_NONCE_LENGTH + 2 * QDF_MAC_ADDR_SIZE;
 	data = qdf_mem_malloc(data_len);
-	if (!data) {
-		pe_err("failed to alloc memory");
+	if (!data)
 		return;
-	}
 
 	/* Update data */
 	buf = data;
@@ -593,7 +586,7 @@ static void lim_get_keys(tpPESession pe_session)
  *
  * Return: None
  */
-static void lim_generate_pmkid(tpPESession pe_session)
+static void lim_generate_pmkid(struct pe_session *pe_session)
 {
 	uint8_t hash[SHA384_DIGEST_SIZE];
 	struct pe_fils_session *fils_info = pe_session->fils_info;
@@ -616,7 +609,7 @@ static void lim_generate_pmkid(tpPESession pe_session)
  *
  * Return: None
  */
-static void lim_generate_pmk(tpPESession pe_session)
+static void lim_generate_pmk(struct pe_session *pe_session)
 {
 	uint8_t nounce[2 * SIR_FILS_NONCE_LENGTH] = {0};
 	uint8_t nounce_len = 2 * SIR_FILS_NONCE_LENGTH;
@@ -624,12 +617,15 @@ static void lim_generate_pmk(tpPESession pe_session)
 	uint32_t len[1];
 	struct pe_fils_session *fils_info = pe_session->fils_info;
 
+	if (!fils_info)
+		return;
+
 	/* Snounce */
-	qdf_mem_copy(nounce, fils_info->fils_nonce,
+	qdf_mem_copy(nounce, pe_session->fils_info->fils_nonce,
 			SIR_FILS_NONCE_LENGTH);
 	/* anounce */
 	qdf_mem_copy(nounce + SIR_FILS_NONCE_LENGTH,
-			fils_info->auth_info.fils_nonce,
+			pe_session->fils_info->auth_info.fils_nonce,
 			SIR_FILS_NONCE_LENGTH);
 	fils_info->fils_pmk_len = lim_get_pmk_length(fils_info->akm);
 
@@ -637,10 +633,8 @@ static void lim_generate_pmk(tpPESession pe_session)
 		qdf_mem_free(fils_info->fils_pmk);
 
 	fils_info->fils_pmk = qdf_mem_malloc(fils_info->fils_pmk_len);
-	if (!fils_info->fils_pmk) {
-		pe_err("failed to alloc memory");
+	if (!fils_info->fils_pmk)
 		return;
-	}
 
 	addr[0] = fils_info->fils_rmsk;
 	len[0] = fils_info->fils_rmsk_len;
@@ -658,7 +652,7 @@ static void lim_generate_pmk(tpPESession pe_session)
  *
  * Return: None
  */
-static void lim_generate_rmsk_data(tpPESession pe_session)
+static void lim_generate_rmsk_data(struct pe_session *pe_session)
 {
 	uint8_t optional_data[4] = {0};
 	uint8_t rmsk_label[] = RMSK_LABEL;
@@ -671,10 +665,8 @@ static void lim_generate_rmsk_data(tpPESession pe_session)
 	auth_info = &(pe_session->fils_info->auth_info);
 	fils_info->fils_rmsk_len = fils_info->fils_rrk_len;
 	fils_info->fils_rmsk = qdf_mem_malloc(fils_info->fils_rrk_len);
-	if (!fils_info->fils_rmsk) {
-		pe_err("failed to alloc memory");
+	if (!fils_info->fils_rmsk)
 		return;
-	}
 
 	/*
 	 * Sequence number sent in EAP-INIT packet,
@@ -697,7 +689,7 @@ static void lim_generate_rmsk_data(tpPESession pe_session)
  *
  * Return: None
  */
-static QDF_STATUS lim_process_auth_wrapped_data(tpPESession pe_session,
+static QDF_STATUS lim_process_auth_wrapped_data(struct pe_session *pe_session,
 			uint8_t *wrapped_data, uint32_t data_len)
 {
 	uint8_t code;
@@ -713,11 +705,11 @@ static QDF_STATUS lim_process_auth_wrapped_data(tpPESession pe_session,
 	uint8_t auth_tag_len;
 
 	fils_info = pe_session->fils_info;
-	if (!fils_info)
-		return QDF_STATUS_E_FAILURE;
-
 	input_data[0] = wrapped_data;
 	input_len[0] = data_len;
+
+	if (!fils_info)
+		return QDF_STATUS_E_FAILURE;
 
 	pe_debug("trying to process the wrappped data");
 
@@ -800,8 +792,8 @@ static QDF_STATUS lim_process_auth_wrapped_data(tpPESession pe_session,
  *
  * Return: true if frame is valid or fils is disable, false otherwise
  */
-bool lim_is_valid_fils_auth_frame(tpAniSirGlobal mac_ctx,
-		tpPESession pe_session,
+bool lim_is_valid_fils_auth_frame(struct mac_context *mac_ctx,
+		struct pe_session *pe_session,
 		tSirMacAuthFrameBody *rx_auth_frm_body)
 {
 	if (!pe_session->fils_info)
@@ -834,8 +826,10 @@ QDF_STATUS lim_create_fils_rik(uint8_t *rrk, uint8_t rrk_len,
 	uint8_t optional_data[SIR_FILS_OPTIONAL_DATA_LEN];
 	uint8_t label[] = SIR_FILS_RIK_LABEL;
 
-	if (!rrk || !rik)
+	if (!rrk || !rik) {
+		pe_err("FILS rrk/rik NULL");
 		return QDF_STATUS_E_FAILURE;
+	}
 
 	optional_data[0] = HMAC_SHA256_128;
 	/* basic validation */
@@ -889,10 +883,9 @@ static int lim_create_fils_wrapper_data(struct pe_fils_session *fils_info)
 		sizeof(uint8_t) + lim_get_auth_tag_len(HMAC_SHA256_128);
 
 	fils_info->fils_erp_reauth_pkt = qdf_mem_malloc(buf_len);
-	if (!fils_info->fils_erp_reauth_pkt) {
-		pe_err("failed to allocate memory");
+	if (!fils_info->fils_erp_reauth_pkt)
 		return -EINVAL;
-	}
+
 	buf = fils_info->fils_erp_reauth_pkt;
 	*buf = 5;
 	buf++;
@@ -943,7 +936,6 @@ static int lim_create_fils_wrapper_data(struct pe_fils_session *fils_info)
 	if (!fils_info->fils_rik) {
 		qdf_mem_free(fils_info->fils_erp_reauth_pkt);
 		fils_info->fils_erp_reauth_pkt = NULL;
-		pe_err("failed to alloc memory");
 		return -EINVAL;
 	}
 	status = lim_create_fils_rik(fils_info->fils_rrk,
@@ -989,12 +981,13 @@ static int lim_create_fils_wrapper_data(struct pe_fils_session *fils_info)
  *
  * Return: None
  */
-void lim_add_fils_data_to_auth_frame(tpPESession session,
+void lim_add_fils_data_to_auth_frame(struct pe_session *session,
 		uint8_t *body)
 {
 	struct pe_fils_session *fils_info;
 
 	fils_info = session->fils_info;
+
 	if (!fils_info)
 		return;
 
@@ -1015,7 +1008,7 @@ void lim_add_fils_data_to_auth_frame(tpPESession session,
 	*body = SIR_FILS_NONCE_EXT_EID;
 	body++;
 	/* Add data */
-	cds_rand_get_bytes(0, fils_info->fils_nonce, SIR_FILS_NONCE_LENGTH);
+	qdf_get_random_bytes(fils_info->fils_nonce, SIR_FILS_NONCE_LENGTH);
 	qdf_mem_copy(body, fils_info->fils_nonce, SIR_FILS_NONCE_LENGTH);
 	body = body + SIR_FILS_NONCE_LENGTH;
 	/* Dump data */
@@ -1033,7 +1026,7 @@ void lim_add_fils_data_to_auth_frame(tpPESession session,
 	*body = SIR_FILS_SESSION_EXT_EID;
 	body++;
 	/* Add data */
-	cds_rand_get_bytes(0, fils_info->fils_session, SIR_FILS_SESSION_LENGTH);
+	qdf_get_random_bytes(fils_info->fils_session, SIR_FILS_SESSION_LENGTH);
 	qdf_mem_copy(body, fils_info->fils_session, SIR_FILS_SESSION_LENGTH);
 	body = body + SIR_FILS_SESSION_LENGTH;
 	/* dump data */
@@ -1067,8 +1060,8 @@ void lim_add_fils_data_to_auth_frame(tpPESession session,
  *
  * Return: true if fils data needs to be processed else false
  */
-bool lim_process_fils_auth_frame2(tpAniSirGlobal mac_ctx,
-		tpPESession pe_session,
+bool lim_process_fils_auth_frame2(struct mac_context *mac_ctx,
+		struct pe_session *pe_session,
 		tSirMacAuthFrameBody *rx_auth_frm_body)
 {
 	int i;
@@ -1076,16 +1069,15 @@ bool lim_process_fils_auth_frame2(tpAniSirGlobal mac_ctx,
 	bool pmkid_found = false;
 	tDot11fIERSN dot11f_ie_rsn = {0};
 
-	if (rx_auth_frm_body->authAlgoNumber != eSIR_FILS_SK_WITHOUT_PFS)
-		return false;
-
 	if (!pe_session->fils_info)
 		return false;
 
-	ret = dot11f_unpack_ie_rsn(mac_ctx,
-				   &rx_auth_frm_body->rsn_ie.info[0],
-				   rx_auth_frm_body->rsn_ie.length,
-				   &dot11f_ie_rsn, 0);
+	if (rx_auth_frm_body->authAlgoNumber != SIR_FILS_SK_WITHOUT_PFS)
+		return false;
+
+	ret = dot11f_unpack_ie_rsn(mac_ctx, &rx_auth_frm_body->rsn_ie.info[0],
+				rx_auth_frm_body->rsn_ie.length,
+				&dot11f_ie_rsn, 0);
 	if (!DOT11F_SUCCEEDED(ret)) {
 		pe_err("unpack failed, ret: %d", ret);
 		return false;
@@ -1122,7 +1114,7 @@ bool lim_process_fils_auth_frame2(tpAniSirGlobal mac_ctx,
  *
  * Return: None
  */
-void lim_update_fils_config(tpPESession session,
+void lim_update_fils_config(struct pe_session *session,
 		tpSirSmeJoinReq sme_join_req)
 {
 	struct pe_fils_session *csr_fils_info;
@@ -1130,6 +1122,7 @@ void lim_update_fils_config(tpPESession session,
 
 	fils_config_info = &sme_join_req->fils_con_info;
 	csr_fils_info = session->fils_info;
+
 	if (!csr_fils_info)
 		return;
 
@@ -1153,17 +1146,15 @@ void lim_update_fils_config(tpPESession session,
 	}
 	csr_fils_info->keyname_nai_data =
 		qdf_mem_malloc(fils_config_info->key_nai_length);
-	if (!csr_fils_info->keyname_nai_data) {
-		pe_err("failed to alloc memory");
+	if (!csr_fils_info->keyname_nai_data)
 		return;
-	}
+
 	qdf_mem_copy(csr_fils_info->keyname_nai_data,
 			fils_config_info->keyname_nai,
 			fils_config_info->key_nai_length);
 	csr_fils_info->fils_rrk =
 		qdf_mem_malloc(fils_config_info->r_rk_length);
 	if (!csr_fils_info->fils_rrk) {
-		pe_err("failed to alloc memory");
 		qdf_mem_free(csr_fils_info->keyname_nai_data);
 		return;
 	}
@@ -1187,7 +1178,6 @@ void lim_update_fils_config(tpPESession session,
 		if (!csr_fils_info->fils_pmk) {
 			qdf_mem_free(csr_fils_info->keyname_nai_data);
 			qdf_mem_free(csr_fils_info->fils_rrk);
-			pe_err("failed to alloc memory");
 			return;
 		}
 		qdf_mem_copy(csr_fils_info->fils_pmk, fils_config_info->pmk,
@@ -1212,9 +1202,9 @@ void lim_update_fils_config(tpPESession session,
  *
  * Return: length of fils data
  */
-uint32_t lim_create_fils_auth_data(tpAniSirGlobal mac_ctx,
+uint32_t lim_create_fils_auth_data(struct mac_context *mac_ctx,
 		tpSirMacAuthFrameBody auth_frame,
-		tpPESession session)
+		struct pe_session *session)
 {
 	uint32_t frame_len = 0;
 	int32_t wrapped_data_len;
@@ -1231,7 +1221,7 @@ uint32_t lim_create_fils_auth_data(tpAniSirGlobal mac_ctx,
 		qdf_mem_free(session->fils_info->fils_erp_reauth_pkt);
 		session->fils_info->fils_erp_reauth_pkt = NULL;
 	}
-	if (auth_frame->authAlgoNumber == eSIR_FILS_SK_WITHOUT_PFS) {
+	if (auth_frame->authAlgoNumber == SIR_FILS_SK_WITHOUT_PFS) {
 		frame_len += session->fils_info->rsn_ie_len;
 		/* FILS nounce */
 		frame_len += SIR_FILS_NONCE_LENGTH + EXTENDED_IE_HEADER_LEN;
@@ -1249,15 +1239,12 @@ uint32_t lim_create_fils_auth_data(tpAniSirGlobal mac_ctx,
 	return frame_len;
 }
 
-void populate_fils_connect_params(tpAniSirGlobal mac_ctx,
-				  tpPESession session,
+void populate_fils_connect_params(struct mac_context *mac_ctx,
+				  struct pe_session *session,
 				  tpSirSmeJoinRsp sme_join_rsp)
 {
 	struct fils_join_rsp_params *fils_join_rsp;
-	struct pe_fils_session *fils_info = (session->fils_info);
-
-	if (!fils_info)
-		return;
+	struct pe_fils_session *fils_info = session->fils_info;
 
 	if (!lim_is_fils_connection(session))
 		return;
@@ -1275,7 +1262,6 @@ void populate_fils_connect_params(tpAniSirGlobal mac_ctx,
 
 	sme_join_rsp->fils_join_rsp = qdf_mem_malloc(sizeof(*fils_join_rsp));
 	if (!sme_join_rsp->fils_join_rsp) {
-		pe_err("fils_join_rsp malloc fails!");
 		pe_delete_fils_info(session);
 		return;
 	}
@@ -1283,7 +1269,6 @@ void populate_fils_connect_params(tpAniSirGlobal mac_ctx,
 	fils_join_rsp = sme_join_rsp->fils_join_rsp;
 	fils_join_rsp->fils_pmk = qdf_mem_malloc(fils_info->fils_pmk_len);
 	if (!fils_join_rsp->fils_pmk) {
-		pe_err("fils_pmk malloc fails!");
 		qdf_mem_free(fils_join_rsp);
 		pe_delete_fils_info(session);
 		return;
@@ -1337,7 +1322,7 @@ void populate_fils_connect_params(tpAniSirGlobal mac_ctx,
  * Return: QDF_STATUS_SUCCESS if we parse GTK successfully,
  *         QDF_STATUS_E_FAILURE otherwise
  */
-static QDF_STATUS lim_parse_kde_elements(tpAniSirGlobal mac_ctx,
+static QDF_STATUS lim_parse_kde_elements(struct mac_context *mac_ctx,
 					 struct pe_fils_session *fils_info,
 					 uint8_t *kde_list,
 					 uint8_t kde_list_len)
@@ -1423,12 +1408,12 @@ static QDF_STATUS lim_parse_kde_elements(tpAniSirGlobal mac_ctx,
 	return QDF_STATUS_SUCCESS;
 }
 
-bool lim_verify_fils_params_assoc_rsp(tpAniSirGlobal mac_ctx,
-				      tpPESession session_entry,
+bool lim_verify_fils_params_assoc_rsp(struct mac_context *mac_ctx,
+				      struct pe_session *session_entry,
 				      tpSirAssocRsp assoc_rsp,
 				      tLimMlmAssocCnf *assoc_cnf)
 {
-	struct pe_fils_session *fils_info = (session_entry->fils_info);
+	struct pe_fils_session *fils_info = session_entry->fils_info;
 	tDot11fIEfils_session fils_session = assoc_rsp->fils_session;
 	tDot11fIEfils_key_confirmation fils_key_auth = assoc_rsp->fils_key_auth;
 	tDot11fIEfils_kde fils_kde = assoc_rsp->fils_kde;
@@ -1480,22 +1465,6 @@ bool lim_verify_fils_params_assoc_rsp(tpAniSirGlobal mac_ctx,
 		pe_err("KDE parsing fails");
 		goto verify_fils_params_fails;
 	}
-
-	if (assoc_rsp->hlp_data_len) {
-		fils_info->hlp_data = qdf_mem_malloc(assoc_rsp->hlp_data_len);
-
-		if (!fils_info->hlp_data) {
-			pe_err("FILS session HLP data malloc fails");
-			return true;
-		}
-
-		/* Save the HLP container IE data if present*/
-		cds_copy_hlp_info(&assoc_rsp->dst_mac, &assoc_rsp->src_mac,
-				  assoc_rsp->hlp_data_len, assoc_rsp->hlp_data,
-				  &fils_info->dst_mac, &fils_info->src_mac,
-				  &fils_info->hlp_data_len,
-				  fils_info->hlp_data);
-	}
 	return true;
 
 verify_fils_params_fails:
@@ -1516,7 +1485,7 @@ verify_fils_params_fails:
  *
  * Return: QDF_STATUS_SUCCESS if found, else QDF_STATUS_E_FAILURE
  */
-static QDF_STATUS find_ie_data_after_fils_session_ie(tpAniSirGlobal mac_ctx,
+static QDF_STATUS find_ie_data_after_fils_session_ie(struct mac_context *mac_ctx,
 						     uint8_t *buf,
 						     uint32_t buf_len,
 						     uint8_t **ie,
@@ -1567,16 +1536,17 @@ static QDF_STATUS find_ie_data_after_fils_session_ie(tpAniSirGlobal mac_ctx,
  *
  * Return: zero on success, error otherwise
  */
-static int fils_aead_encrypt(const u8 *kek, unsigned int kek_len,
-			     const u8 *own_mac, const u8 *bssid,
-			     const u8 *snonce, const u8 *anonce,
-			     const u8 *data, size_t data_len, u8 *plain_text,
-			     size_t plain_text_len, u8 *out)
+static int fils_aead_encrypt(const uint8_t *kek, unsigned int kek_len,
+			     const uint8_t *own_mac, const uint8_t *bssid,
+			     const uint8_t *snonce, const uint8_t *anonce,
+			     const uint8_t *data, size_t data_len,
+			     uint8_t *plain_text, size_t plain_text_len,
+			     uint8_t *out)
 {
-	u8 v[AES_BLOCK_SIZE];
-	const u8 *aad[6];
+	uint8_t v[AES_BLOCK_SIZE];
+	const uint8_t *aad[6];
 	size_t aad_len[6];
-	u8 *buf;
+	uint8_t *buf;
 	int ret;
 
 	/* SIV Encrypt/Decrypt takes input key of length 256, 384 or 512 bits */
@@ -1598,11 +1568,8 @@ static int fils_aead_encrypt(const u8 *kek, unsigned int kek_len,
 
 	if (plain_text == out) {
 		buf = qdf_mem_malloc(plain_text_len);
-		if (buf == NULL) {
-			QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
-				  FL("Failed to allocate memory"));
+		if (!buf)
 			return -ENOMEM;
-		}
 		qdf_mem_copy(buf, plain_text, plain_text_len);
 	} else {
 		buf = plain_text;
@@ -1646,17 +1613,14 @@ error:
 	return ret;
 }
 
-QDF_STATUS aead_encrypt_assoc_req(tpAniSirGlobal mac_ctx,
-				  tpPESession pe_session,
+QDF_STATUS aead_encrypt_assoc_req(struct mac_context *mac_ctx,
+				  struct pe_session *pe_session,
 				  uint8_t *frm, uint32_t *frm_len)
 {
 	uint8_t *plain_text = NULL, *data;
 	uint32_t plain_text_len = 0, data_len;
 	QDF_STATUS status;
-	struct pe_fils_session *fils_info = (pe_session->fils_info);
-
-	if (!fils_info)
-		return QDF_STATUS_E_FAILURE;
+	struct pe_fils_session *fils_info = pe_session->fils_info;
 
 	/*
 	 * data is the packet data after MAC header till
@@ -1720,18 +1684,19 @@ QDF_STATUS aead_encrypt_assoc_req(tpAniSirGlobal mac_ctx,
  *
  * Return: zero on success, error otherwise
  */
-static int fils_aead_decrypt(const u8 *kek, unsigned int kek_len,
-			     const u8 *own_mac, const u8 *bssid,
-			     const u8 *snonce, const u8 *anonce,
-			     const u8 *data, size_t data_len, u8 *ciphered_text,
-			     size_t ciphered_text_len, u8 *plain_text)
+static int fils_aead_decrypt(const uint8_t *kek, unsigned int kek_len,
+			     const uint8_t *own_mac, const uint8_t *bssid,
+			     const uint8_t *snonce, const uint8_t *anonce,
+			     const uint8_t *data, size_t data_len,
+			     uint8_t *ciphered_text, size_t ciphered_text_len,
+			     uint8_t *plain_text)
 {
-	const u8 *aad[6];
+	const uint8_t *aad[6];
 	size_t aad_len[6];
-	u8 *buf;
+	uint8_t *buf;
 	size_t buf_len;
-	u8 v[AES_BLOCK_SIZE];
-	u8 siv[AES_BLOCK_SIZE];
+	uint8_t v[AES_BLOCK_SIZE];
+	uint8_t siv[AES_BLOCK_SIZE];
 	int ret;
 
 	/* SIV Encrypt/Decrypt takes input key of length 256, 384 or 512 bits */
@@ -1760,11 +1725,8 @@ static int fils_aead_decrypt(const u8 *kek, unsigned int kek_len,
 	if (ciphered_text == plain_text) {
 		/* in place decryption */
 		buf = qdf_mem_malloc(buf_len);
-		if (buf == NULL) {
-			QDF_TRACE(QDF_MODULE_ID_QDF, QDF_TRACE_LEVEL_ERROR,
-				  FL("Failed to allocate memory"));
+		if (!buf)
 			return -ENOMEM;
-		}
 		qdf_mem_copy(buf, ciphered_text + AES_BLOCK_SIZE, buf_len);
 	} else {
 		buf = ciphered_text + AES_BLOCK_SIZE;
@@ -1809,15 +1771,15 @@ error:
 	return ret;
 }
 
-QDF_STATUS aead_decrypt_assoc_rsp(tpAniSirGlobal mac_ctx,
-				  tpPESession session,
+QDF_STATUS aead_decrypt_assoc_rsp(struct mac_context *mac_ctx,
+				  struct pe_session *session,
 				  tDot11fAssocResponse *ar,
 				  uint8_t *p_frame, uint32_t *n_frame)
 {
 	QDF_STATUS status;
 	uint32_t data_len, fils_ies_len;
 	uint8_t *fils_ies;
-	struct pe_fils_session *fils_info = (session->fils_info);
+	struct pe_fils_session *fils_info = session->fils_info;
 
 	status = find_ie_data_after_fils_session_ie(mac_ctx, p_frame +
 					      FIXED_PARAM_OFFSET_ASSOC_RSP,
@@ -1849,15 +1811,12 @@ QDF_STATUS aead_decrypt_assoc_rsp(tpAniSirGlobal mac_ctx,
 	return status;
 }
 
-void lim_update_fils_rik(tpPESession pe_session,
+void lim_update_fils_rik(struct pe_session *pe_session,
 			 tSirRoamOffloadScanReq *req_buffer)
 {
 	struct pe_fils_session *pe_fils_info = pe_session->fils_info;
 	struct roam_fils_params *roam_fils_params =
 		&req_buffer->roam_fils_params;
-
-	if (!roam_fils_params)
-		return;
 
 	/*
 	 * If it is first connection, LIM session entries will not be
@@ -1868,9 +1827,9 @@ void lim_update_fils_rik(tpPESession pe_session,
 	if ((!lim_is_fils_connection(pe_session) ||
 	     !pe_fils_info) && (req_buffer->is_fils_connection)) {
 		if (roam_fils_params->rrk_length > FILS_MAX_RRK_LENGTH) {
-			pe_err("FILS rrk len(%d) max (%d)",
-					roam_fils_params->rrk_length,
-					FILS_MAX_RRK_LENGTH);
+			pe_debug("FILS rrk len(%d) max (%d)",
+				 roam_fils_params->rrk_length,
+				 FILS_MAX_RRK_LENGTH);
 			return;
 		}
 
@@ -1883,6 +1842,10 @@ void lim_update_fils_rik(tpPESession pe_session,
 		return;
 	}
 
+	if (!pe_fils_info) {
+		pe_debug("No FILS info available in the session");
+		return;
+	}
 	if ((pe_fils_info->fils_rik_len > FILS_MAX_RIK_LENGTH) ||
 	    !pe_fils_info->fils_rik) {
 		pe_err("Fils rik len(%d) max %d", pe_fils_info->fils_rik_len,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2019 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -30,14 +30,13 @@
    Include Files
    ------------------------------------------------------------------------*/
 
-#include "ani_global.h"          /* for tpAniSirGlobal */
+#include "ani_global.h"          /* for struct mac_context **/
 
 #include "lim_trace.h"
 #include "lim_timer_utils.h"
 #include "qdf_trace.h"
 
 #ifdef LIM_TRACE_RECORD
-uint32_t g_mgmt_frame_stats[14];
 
 #define LIM_TRACE_MAX_SUBTYPES 14
 
@@ -58,18 +57,12 @@ static uint8_t *__lim_trace_get_timer_string(uint16_t timerId)
 		CASE_RETURN_STRING(eLIM_PROBE_AFTER_HB_TIMER);
 		CASE_RETURN_STRING(eLIM_ADDTS_RSP_TIMER);
 		CASE_RETURN_STRING(eLIM_CHANNEL_SWITCH_TIMER);
-		CASE_RETURN_STRING(eLIM_LEARN_DURATION_TIMER);
-		CASE_RETURN_STRING(eLIM_QUIET_TIMER);
-		CASE_RETURN_STRING(eLIM_QUIET_BSS_TIMER);
 		CASE_RETURN_STRING(eLIM_WPS_OVERLAP_TIMER);
 		CASE_RETURN_STRING(eLIM_FT_PREAUTH_RSP_TIMER);
 		CASE_RETURN_STRING(eLIM_REMAIN_CHN_TIMER);
-		CASE_RETURN_STRING(eLIM_PERIODIC_PROBE_REQ_TIMER);
 		CASE_RETURN_STRING(eLIM_DISASSOC_ACK_TIMER);
 		CASE_RETURN_STRING(eLIM_DEAUTH_ACK_TIMER);
 		CASE_RETURN_STRING(eLIM_PERIODIC_JOIN_PROBE_REQ_TIMER);
-		CASE_RETURN_STRING(eLIM_INSERT_SINGLESHOT_NOA_TIMER);
-		CASE_RETURN_STRING(eLIM_CONVERT_ACTIVE_CHANNEL_TO_PASSIVE);
 		CASE_RETURN_STRING(eLIM_AUTH_RETRY_TIMER);
 	default:
 		return "UNKNOWN";
@@ -95,12 +88,12 @@ static uint8_t *__lim_trace_get_mgmt_drop_reason_string(uint16_t dropReason)
 	}
 }
 
-void lim_trace_init(tpAniSirGlobal pMac)
+void lim_trace_init(struct mac_context *mac)
 {
 	qdf_trace_register(QDF_MODULE_ID_PE, &lim_trace_dump);
 }
 
-void lim_trace_dump(void *pMac, tp_qdf_trace_record pRecord,
+void lim_trace_dump(void *mac, tp_qdf_trace_record pRecord,
 		    uint16_t recIndex)
 {
 	static char *frameSubtypeStr[LIM_TRACE_MAX_SUBTYPES] = {
@@ -276,113 +269,55 @@ void lim_trace_dump(void *pMac, tp_qdf_trace_record pRecord,
 	}
 }
 
-void mac_trace_msg_tx(tpAniSirGlobal pMac, uint8_t session, uint32_t data)
+void mac_trace_msg_tx(struct mac_context *mac, uint8_t session, uint32_t data)
 {
 
 	uint16_t msgId = (uint16_t) MAC_TRACE_GET_MSG_ID(data);
-	uint8_t moduleId = (uint8_t) MAC_TRACE_GET_MODULE_ID(data);
+	uint8_t module_id = (uint8_t) MAC_TRACE_GET_MODULE_ID(data);
 
-	switch (moduleId) {
+	switch (module_id) {
 	case SIR_LIM_MODULE_ID:
 		if (msgId >= SIR_LIM_ITC_MSG_TYPES_BEGIN)
-			mac_trace(pMac, TRACE_CODE_TX_LIM_MSG, session, data);
+			mac_trace(mac, TRACE_CODE_TX_LIM_MSG, session, data);
 		else
-			mac_trace(pMac, TRACE_CODE_TX_SME_MSG, session, data);
+			mac_trace(mac, TRACE_CODE_TX_SME_MSG, session, data);
 		break;
 	case SIR_WMA_MODULE_ID:
-		mac_trace(pMac, TRACE_CODE_TX_WMA_MSG, session, data);
+		mac_trace(mac, TRACE_CODE_TX_WMA_MSG, session, data);
 		break;
 	case SIR_CFG_MODULE_ID:
-		mac_trace(pMac, TRACE_CODE_TX_CFG_MSG, session, data);
+		mac_trace(mac, TRACE_CODE_TX_CFG_MSG, session, data);
 		break;
 	default:
-		mac_trace(pMac, moduleId, session, data);
-		break;
-	}
-}
-
-void mac_trace_msg_tx_new(tpAniSirGlobal pMac, uint8_t module, uint8_t session,
-			  uint32_t data)
-{
-	uint16_t msgId = (uint16_t) MAC_TRACE_GET_MSG_ID(data);
-	uint8_t moduleId = (uint8_t) MAC_TRACE_GET_MODULE_ID(data);
-
-	switch (moduleId) {
-	case SIR_LIM_MODULE_ID:
-		if (msgId >= SIR_LIM_ITC_MSG_TYPES_BEGIN)
-			mac_trace_new(pMac, module, TRACE_CODE_TX_LIM_MSG,
-				      session, data);
-		else
-			mac_trace_new(pMac, module, TRACE_CODE_TX_SME_MSG,
-				      session, data);
-		break;
-	case SIR_WMA_MODULE_ID:
-		mac_trace_new(pMac, module, TRACE_CODE_TX_WMA_MSG, session, data);
-		break;
-	case SIR_CFG_MODULE_ID:
-		mac_trace_new(pMac, module, TRACE_CODE_TX_CFG_MSG, session, data);
-		break;
-	default:
-		mac_trace(pMac, moduleId, session, data);
+		mac_trace(mac, module_id, session, data);
 		break;
 	}
 }
 
 /*
- * bit31: Rx message defferred or not
+ * bit31: Rx message deferred or not
  * bit 0-15: message ID:
  */
-void mac_trace_msg_rx(tpAniSirGlobal pMac, uint8_t session, uint32_t data)
+void mac_trace_msg_rx(struct mac_context *mac, uint8_t session, uint32_t data)
 {
 	uint16_t msgId = (uint16_t) MAC_TRACE_GET_MSG_ID(data);
-	uint8_t moduleId = (uint8_t) MAC_TRACE_GET_MODULE_ID(data);
+	uint8_t module_id = (uint8_t) MAC_TRACE_GET_MODULE_ID(data);
 
-	switch (moduleId) {
+	switch (module_id) {
 	case SIR_LIM_MODULE_ID:
 		if (msgId >= SIR_LIM_ITC_MSG_TYPES_BEGIN)
-			mac_trace(pMac, TRACE_CODE_RX_LIM_MSG, session, data);
+			mac_trace(mac, TRACE_CODE_RX_LIM_MSG, session, data);
 		else
-			mac_trace(pMac, TRACE_CODE_RX_SME_MSG, session, data);
+			mac_trace(mac, TRACE_CODE_RX_SME_MSG, session, data);
 		break;
 	case SIR_WMA_MODULE_ID:
-		mac_trace(pMac, TRACE_CODE_RX_WMA_MSG, session, data);
+		mac_trace(mac, TRACE_CODE_RX_WMA_MSG, session, data);
 		break;
 	case SIR_CFG_MODULE_ID:
-		mac_trace(pMac, TRACE_CODE_RX_CFG_MSG, session, data);
+		mac_trace(mac, TRACE_CODE_RX_CFG_MSG, session, data);
 		break;
 	default:
-		mac_trace(pMac, moduleId, session, data);
-		break;
-	}
-}
-
-/*
- * bit31: Rx message defferred or not
- * bit 0-15: message ID:
- */
-void mac_trace_msg_rx_new(tpAniSirGlobal pMac, uint8_t module, uint8_t session,
-			  uint32_t data)
-{
-	uint16_t msgId = (uint16_t) MAC_TRACE_GET_MSG_ID(data);
-	uint8_t moduleId = (uint8_t) MAC_TRACE_GET_MODULE_ID(data);
-
-	switch (moduleId) {
-	case SIR_LIM_MODULE_ID:
-		if (msgId >= SIR_LIM_ITC_MSG_TYPES_BEGIN)
-			mac_trace_new(pMac, module, TRACE_CODE_RX_LIM_MSG,
-				      session, data);
-		else
-			mac_trace_new(pMac, module, TRACE_CODE_RX_SME_MSG,
-				      session, data);
-		break;
-	case SIR_WMA_MODULE_ID:
-		mac_trace_new(pMac, module, TRACE_CODE_RX_WMA_MSG, session, data);
-		break;
-	case SIR_CFG_MODULE_ID:
-		mac_trace_new(pMac, module, TRACE_CODE_RX_CFG_MSG, session, data);
-		break;
-	default:
-		mac_trace(pMac, moduleId, session, data);
+		mac_trace(mac, module_id, session, data);
 		break;
 	}
 }
@@ -392,8 +327,6 @@ uint8_t *lim_trace_get_mlm_state_string(uint32_t mlmState)
 	switch (mlmState) {
 		CASE_RETURN_STRING(eLIM_MLM_OFFLINE_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_IDLE_STATE);
-		CASE_RETURN_STRING(eLIM_MLM_WT_PROBE_RESP_STATE);
-		CASE_RETURN_STRING(eLIM_MLM_PASSIVE_SCAN_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_WT_JOIN_BEACON_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_JOINED_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_BSS_STARTED_STATE);
@@ -408,7 +341,6 @@ uint8_t *lim_trace_get_mlm_state_string(uint32_t mlmState)
 		CASE_RETURN_STRING(eLIM_MLM_REASSOCIATED_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_LINK_ESTABLISHED_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_WT_ASSOC_CNF_STATE);
-		CASE_RETURN_STRING(eLIM_MLM_LEARN_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_WT_ADD_BSS_RSP_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_WT_DEL_BSS_RSP_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_WT_ADD_BSS_RSP_ASSOC_STATE);
@@ -420,10 +352,8 @@ uint8_t *lim_trace_get_mlm_state_string(uint32_t mlmState)
 		CASE_RETURN_STRING(eLIM_MLM_WT_SET_BSS_KEY_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_WT_SET_STA_KEY_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_WT_SET_STA_BCASTKEY_STATE);
-		CASE_RETURN_STRING(eLIM_MLM_WT_SET_MIMOPS_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_WT_ADD_BSS_RSP_FT_REASSOC_STATE);
 		CASE_RETURN_STRING(eLIM_MLM_WT_FT_REASSOC_RSP_STATE);
-		CASE_RETURN_STRING(eLIM_MLM_P2P_LISTEN_STATE);
 	default:
 		return "UNKNOWN";
 		break;

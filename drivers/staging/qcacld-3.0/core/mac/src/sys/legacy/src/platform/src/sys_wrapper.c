@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2018 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -104,7 +104,7 @@ uint32_t tx_timer_activate(TX_TIMER *timer_ptr)
 {
 	QDF_STATUS status;
 
-	/* Uncomment the asserts, if the intention is to debug the occurence of the */
+	/* Uncomment the asserts, if the intention is to debug the occurrence of the */
 	/* following anomalous cnditions. */
 
 	/* Assert that the timer structure pointer passed, is not NULL */
@@ -249,7 +249,7 @@ static void tx_main_timer_func(void *functionContext)
 
 	/* Now call the actual timer function, taking the function pointer, */
 	/* from the timer structure. */
-	(*timer_ptr->pExpireFunc)(timer_ptr->pMac, timer_ptr->expireInput);
+	(*timer_ptr->pExpireFunc)(timer_ptr->mac, timer_ptr->expireInput);
 
 	/* check if this needs to be rescheduled */
 	if (0 != timer_ptr->rescheduleTimeInMsecs) {
@@ -307,7 +307,7 @@ uint32_t tx_timer_create_intern_debug(void *pMacGlobal,
 		TX_MSECS_IN_1_TICK * initScheduleTimeInTicks;
 	timer_ptr->rescheduleTimeInMsecs =
 		TX_MSECS_IN_1_TICK * rescheduleTimeInTicks;
-	timer_ptr->pMac = pMacGlobal;
+	timer_ptr->mac = pMacGlobal;
 
 	/* Set the flag indicating that the timer was created */
 	timer_ptr->tmrSignature = TX_AIRGO_TMR_SIGNATURE;
@@ -367,7 +367,7 @@ uint32_t tx_timer_create_intern(void *pMacGlobal, TX_TIMER *timer_ptr,
 		TX_MSECS_IN_1_TICK * initScheduleTimeInTicks;
 	timer_ptr->rescheduleTimeInMsecs =
 		TX_MSECS_IN_1_TICK * rescheduleTimeInTicks;
-	timer_ptr->pMac = pMacGlobal;
+	timer_ptr->mac = pMacGlobal;
 
 	/* Set the flag indicating that the timer was created */
 	timer_ptr->tmrSignature = TX_AIRGO_TMR_SIGNATURE;

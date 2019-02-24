@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2019 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -151,10 +151,23 @@
 #define SIR_MAC_QOS_DEF_BA_REQ      4
 #define SIR_MAC_QOS_DEF_BA_RSP      5
 
+#define SIR_MAC_ADDBA_REQ     0
+#define SIR_MAC_ADDBA_RSP     1
+#define SIR_MAC_DELBA_REQ     2
+
+#define SIR_MAC_BA_POLICY_DELAYED       0
+#define SIR_MAC_BA_POLICY_IMMEDIATE     1
+#define SIR_MAC_BA_AMSDU_SUPPORTED      1
+#define SIR_MAC_BA_DEFAULT_BUFF_SIZE    64
+
+#define MAX_BA_BUFF_SIZE    256
+
+#ifdef ANI_SUPPORT_11H
 #define SIR_MAC_ACTION_MEASURE_REQUEST_ID      0
 #define SIR_MAC_ACTION_MEASURE_REPORT_ID       1
 #define SIR_MAC_ACTION_TPC_REQUEST_ID          2
 #define SIR_MAC_ACTION_TPC_REPORT_ID           3
+#endif /* ANI_SUPPORT_11H */
 #define SIR_MAC_ACTION_CHANNEL_SWITCH_ID       4
 
 #ifdef ANI_SUPPORT_11H
@@ -199,7 +212,7 @@
 #define SIR_MAC_DLP_RSP             1
 #define SIR_MAC_DLP_TEARDOWN        2
 
-/* block acknowledgement action frame types */
+/* block acknowledgment action frame types */
 #define SIR_MAC_ACTION_VENDOR_SPECIFIC 9
 #define SIR_MAC_ACTION_VENDOR_SPECIFIC_CATEGORY     0x7F
 #define SIR_MAC_ACTION_P2P_SUBTYPE_PRESENCE_RSP     2
@@ -207,7 +220,6 @@
 /* Public Action for 20/40 BSS Coexistence */
 #define SIR_MAC_ACTION_2040_BSS_COEXISTENCE     0
 #define SIR_MAC_ACTION_EXT_CHANNEL_SWITCH_ID    4
-#define SIR_MAC_ACTION_MEASUREMENT_PILOT        7
 
 /* Public Action frames for GAS */
 #define SIR_MAC_ACTION_GAS_INITIAL_REQUEST      0x0A
@@ -399,7 +411,6 @@
 #define VHT_RX_HIGHEST_SUPPORTED_DATA_RATE_2_2       780
 #define VHT_TX_HIGHEST_SUPPORTED_DATA_RATE_2_2       780
 
-#define VHT_CAP_80_SUPP 0
 #define VHT_CAP_160_SUPP 1
 #define VHT_CAP_160_AND_80P80_SUPP 2
 
@@ -508,15 +519,11 @@
 #define SIR_MAC_OUI_WSM_SCHEDULE_MIN        20
 #define SIR_MAC_OUI_WSM_SCHEDULE_MAX        20
 
-#ifdef WLAN_NS_OFFLOAD
 #define SIR_MAC_NS_OFFLOAD_SIZE             1   /* support only one IPv6 offload */
-/* Number of target IP V6 addresses for NS offload */
-#define SIR_MAC_NUM_TARGET_IPV6_NS_OFFLOAD_NA   16
 #define SIR_MAC_IPV6_ADDR_LEN               16
 #define SIR_IPV6_ADDR_VALID                 1
 #define SIR_IPV6_ADDR_UC_TYPE               0
 #define SIR_IPV6_ADDR_AC_TYPE               1
-#endif /* WLAN_NS_OFFLOAD */
 
 /* ----------------------------------------------------------------------------- */
 
@@ -619,7 +626,7 @@
 	((u16value) &= (~(SIR_MAC_SET_ ## bitname(0))))
 
 #define IS_WES_MODE_ENABLED(x) \
-	((x)->roam.configParam.isWESModeEnabled)
+	((x)->mlme_cfg->lfr.wes_mode_enabled)
 
 #define BA_RECIPIENT       1
 #define BA_INITIATOR       2
@@ -678,7 +685,7 @@ typedef enum eSirMacStatusCodes {
 	/* element is unacceptable */
 	eSIR_MAC_SPRTD_CHANNELS_BAD_STATUS = 24,        /* Association request rejected because the information in the Supported Channels */
 	/* element is unacceptable */
-	eSIR_MAC_SHORT_SLOT_NOT_SUPORTED_STATUS = 25,   /* Association denied due to requesting station not supporting the Short Slot Time */
+	eSIR_MAC_SHORT_SLOT_NOT_SUPPORTED_STATUS = 25,   /* Association denied due to requesting station not supporting the Short Slot Time */
 	/* option */
 	eSIR_MAC_DSSS_OFDM_NOT_SUPPORTED_STATUS = 26,   /* Association denied due to requesting station not supporting the DSSS-OFDM option */
 	/* reserved                                     27-29 */
@@ -701,7 +708,7 @@ typedef enum eSirMacStatusCodes {
 	eSIR_MAC_TS_NOT_HONOURED_STATUS = 39,   /* The TS has not been created because the request cannot be honored; however, a suggested */
 	/* TSPEC is provided so that the initiating STA may attempt to set another TS */
 	/* with the suggested changes to the TSPEC */
-	eSIR_MAC_INVALID_INFORMATION_ELEMENT_STATUS = 40,       /* Invalid information element, i.e., an information element defined in this standard for */
+	eSIR_MAC_INVALID_IE_STATUS = 40,       /* Invalid information element, i.e., an information element defined in this standard for */
 	/* which the content does not meet the specifications in Clause 7 */
 	eSIR_MAC_INVALID_GROUP_CIPHER_STATUS = 41,      /* Invalid group cipher */
 	eSIR_MAC_INVALID_PAIRWISE_CIPHER_STATUS = 42,   /* Invalid pairwise cipher */
@@ -783,30 +790,6 @@ typedef enum eSirMacReasonCodes {
 	/* reserved                                         47 - 65535. */
 	eSIR_BEACON_MISSED = 65534,     /* We invented this to tell beacon missed case */
 } tSirMacReasonCodes;
-
-/* BA Initiator v/s Recipient */
-typedef enum eBADirection {
-	eBA_RECIPIENT,
-	eBA_INITIATOR
-} tBADirection;
-
-/* A-MPDU/BA Enable/Disable in Tx/Rx direction */
-typedef enum eBAEnable {
-	eBA_DISABLE,
-	eBA_ENABLE
-} tBAEnable;
-
-/* A-MPDU/BA Policy */
-typedef enum eBAPolicy {
-	eBA_UNCOMPRESSED,
-	eBA_COMPRESSED
-} tBAPolicy;
-
-/* A-MPDU/BA Policy */
-typedef enum eBAPolicyType {
-	eBA_POLICY_DELAYED,
-	eBA_POLICY_IMMEDIATE
-} tBAPolicyType;
 
 /* / Frame control field format (2 bytes) */
 typedef struct sSirMacFrameCtl {
@@ -1008,10 +991,11 @@ struct merged_mac_rate_set {
 	uint8_t num_rates;
 	uint8_t rate[2 * SIR_MAC_RATESET_EID_MAX];
 };
+
 /* Reserve 1 byte for NULL character in the SSID name field to print in %s */
 typedef struct sSirMacSSid {
 	uint8_t length;
-	uint8_t ssId[SIR_MAC_MAX_SSID_LENGTH + 1];
+	uint8_t ssId[SIR_MAC_MAX_SSID_LENGTH +1];
 } qdf_packed tSirMacSSid;
 
 typedef struct sSirMacWpaInfo {
@@ -1121,6 +1105,10 @@ typedef struct sSirMacRRMEnabledCap {
 #define SIR_MAC_EDCAACI_VIDEO       (EDCA_AC_VI)
 #define SIR_MAC_EDCAACI_VOICE       (EDCA_AC_VO)
 
+#define MU_EDCA_DEF_AIFSN     0
+#define MU_EDCA_DEF_CW_MAX    15
+#define MU_EDCA_DEF_CW_MIN    15
+#define MU_EDCA_DEF_TIMER     255
 /* access category record */
 typedef struct sSirMacAciAifsn {
 #ifndef ANI_LITTLE_BIT_ENDIAN
@@ -1150,7 +1138,11 @@ typedef struct sSirMacCW {
 typedef struct sSirMacEdcaParamRecord {
 	tSirMacAciAifsn aci;
 	tSirMacCW cw;
-	uint16_t txoplimit;
+	union {
+		uint16_t txoplimit;
+		uint16_t mu_edca_timer;
+	};
+	uint8_t no_ack;
 } qdf_packed tSirMacEdcaParamRecord;
 
 typedef struct sSirMacQosInfo {
@@ -1200,13 +1192,6 @@ typedef struct sSirMacEdcaParamSetIE {
 	tSirMacEdcaParamRecord acvo;    /* voice */
 } qdf_packed tSirMacEdcaParamSetIE;
 
-typedef struct sSirMacQoSParams {
-	uint8_t count;
-	uint16_t limit;
-	uint8_t CWmin[8];
-	uint8_t AIFS[8];
-} qdf_packed tSirMacQoSParams;
-
 /* ts info direction field can take any of these values */
 #define SIR_MAC_DIRECTION_UPLINK    0
 #define SIR_MAC_DIRECTION_DNLINK    1
@@ -1218,72 +1203,6 @@ typedef struct sSirMacQoSParams {
 #define SIR_MAC_ACCESSPOLICY_EDCA   1
 #define SIR_MAC_ACCESSPOLICY_HCCA   2
 #define SIR_MAC_ACCESSPOLICY_BOTH   3
-
-typedef struct sSirMacTSInfoTfc {
-#ifndef ANI_LITTLE_BIT_ENDIAN
-	uint8_t burstSizeDefn:1;
-	uint8_t reserved:7;
-#else
-	uint8_t reserved:7;
-	uint8_t burstSizeDefn:1;
-#endif
-
-#ifndef ANI_LITTLE_BIT_ENDIAN
-	uint16_t ackPolicy:2;
-	uint16_t userPrio:3;
-	uint16_t psb:1;
-	uint16_t aggregation:1;
-	uint16_t accessPolicy:2;
-	uint16_t direction:2;
-	uint16_t tsid:4;
-	uint16_t trafficType:1;
-#else
-	uint16_t trafficType:1;
-	uint16_t tsid:4;
-	uint16_t direction:2;
-	uint16_t accessPolicy:2;
-	uint16_t aggregation:1;
-	uint16_t psb:1;
-	uint16_t userPrio:3;
-	uint16_t ackPolicy:2;
-#endif
-} qdf_packed tSirMacTSInfoTfc;
-
-typedef struct sSirMacTSInfoSch {
-#ifndef ANI_LITTLE_BIT_ENDIAN
-	uint8_t rsvd:7;
-	uint8_t schedule:1;
-#else
-	uint8_t schedule:1;
-	uint8_t rsvd:7;
-#endif
-} qdf_packed tSirMacTSInfoSch;
-
-typedef struct sSirMacTSInfo {
-	tSirMacTSInfoTfc traffic;
-	tSirMacTSInfoSch schedule;
-} qdf_packed tSirMacTSInfo;
-
-typedef struct sSirMacTspecIE {
-	uint8_t type;
-	uint8_t length;
-	tSirMacTSInfo tsinfo;
-	uint16_t nomMsduSz;
-	uint16_t maxMsduSz;
-	uint32_t minSvcInterval;
-	uint32_t maxSvcInterval;
-	uint32_t inactInterval;
-	uint32_t suspendInterval;
-	uint32_t svcStartTime;
-	uint32_t minDataRate;
-	uint32_t meanDataRate;
-	uint32_t peakDataRate;
-	uint32_t maxBurstSz;
-	uint32_t delayBound;
-	uint32_t minPhyRate;
-	uint16_t surplusBw;
-	uint16_t mediumTime;
-} qdf_packed tSirMacTspecIE;
 
 /* frame classifier types */
 #define SIR_MAC_TCLASTYPE_ETHERNET 0
@@ -1550,26 +1469,6 @@ typedef struct sSirVHtCap {
 	tSirVhtMcsInfo suppMcs;
 } tSirVHTCap;
 
-/**
- * struct sSirHtCap - HT capabilities
- *
- * This structure refers to "HT capabilities element" as
- * described in 802.11n draft section 7.3.2.52
- */
-
-typedef struct sSirHtCap {
-	uint16_t capInfo;
-	uint8_t ampduParamsInfo;
-	uint8_t suppMcsSet[16];
-	uint16_t extendedHtCapInfo;
-	uint32_t txBFCapInfo;
-	uint8_t antennaSelectionInfo;
-} tSirHTCap;
-
-/* HT Cap and HT IE Size defines */
-#define HT_CAPABILITY_IE_SIZE                       28
-#define HT_INFO_IE_SIZE                                          24
-
 /* */
 /* Determines the current operating mode of the 802.11n STA */
 /* */
@@ -1746,41 +1645,6 @@ typedef enum eHTCapability {
 	eHT_PCO_PHASE
 } tHTCapability;
 
-/* HT Capabilities Info */
-typedef struct sSirMacHTCapabilityInfo {
-#ifndef ANI_LITTLE_BIT_ENDIAN
-	uint16_t lsigTXOPProtection:1;  /* Dynamic state */
-	uint16_t stbcControlFrame:1;    /* Static via CFG */
-	uint16_t psmp:1;        /* Static via CFG */
-	uint16_t dsssCckMode40MHz:1;    /* Static via CFG */
-	uint16_t maximalAMSDUsize:1;    /* Static via CFG */
-	uint16_t delayedBA:1;   /* Static via CFG */
-	uint16_t rxSTBC:2;      /* Static via CFG */
-	uint16_t txSTBC:1;      /* Static via CFG */
-	uint16_t shortGI40MHz:1;        /* Static via CFG */
-	uint16_t shortGI20MHz:1;        /* Static via CFG */
-	uint16_t greenField:1;  /* Static via CFG */
-	uint16_t mimoPowerSave:2;       /* Dynamic state */
-	uint16_t supportedChannelWidthSet:1;    /* Static via CFG */
-	uint16_t advCodingCap:1;        /* Static via CFG */
-#else
-	uint16_t advCodingCap:1;
-	uint16_t supportedChannelWidthSet:1;
-	uint16_t mimoPowerSave:2;
-	uint16_t greenField:1;
-	uint16_t shortGI20MHz:1;
-	uint16_t shortGI40MHz:1;
-	uint16_t txSTBC:1;
-	uint16_t rxSTBC:2;
-	uint16_t delayedBA:1;
-	uint16_t maximalAMSDUsize:1;
-	uint16_t dsssCckMode40MHz:1;
-	uint16_t psmp:1;
-	uint16_t stbcControlFrame:1;
-	uint16_t lsigTXOPProtection:1;
-#endif
-} qdf_packed tSirMacHTCapabilityInfo;
-
 /* HT Parameters Info */
 typedef struct sSirMacHTParametersInfo {
 #ifndef ANI_LITTLE_BIT_ENDIAN
@@ -1887,61 +1751,6 @@ typedef struct sSirMacASCapabilityInfo {
 	uint8_t reserved2:1;
 #endif
 } qdf_packed tSirMacASCapabilityInfo;
-
-/* Additional HT IE Field1 */
-typedef struct sSirMacHTInfoField1 {
-#ifndef ANI_LITTLE_BIT_ENDIAN
-	uint8_t serviceIntervalGranularity:3;   /* Dynamic state */
-	uint8_t controlledAccessOnly:1; /* Static via CFG */
-	uint8_t rifsMode:1;     /* Dynamic state */
-	uint8_t recommendedTxWidthSet:1;        /* Dynamic state */
-	uint8_t secondaryChannelOffset:2;       /* Dynamic state */
-#else
-	uint8_t secondaryChannelOffset:2;
-	uint8_t recommendedTxWidthSet:1;
-	uint8_t rifsMode:1;
-	uint8_t controlledAccessOnly:1;
-	uint8_t serviceIntervalGranularity:3;
-#endif
-} qdf_packed tSirMacHTInfoField1;
-
-/* Additional HT IE Field2 */
-typedef struct sSirMacHTInfoField2 {
-#ifndef ANI_LITTLE_BIT_ENDIAN
-	uint16_t reserved:11;
-	uint16_t obssNonHTStaPresent:1; /*added for Obss  */
-	uint16_t transmitBurstLimit:1;
-	uint16_t nonGFDevicesPresent:1;
-	uint16_t opMode:2;      /* Dynamic state */
-#else
-	uint16_t opMode:2;
-	uint16_t nonGFDevicesPresent:1;
-	uint16_t transmitBurstLimit:1;
-	uint16_t obssNonHTStaPresent:1; /*added for Obss  */
-	uint16_t reserved:11;
-#endif
-} qdf_packed tSirMacHTInfoField2;
-
-/* Additional HT IE Field3 */
-typedef struct sSirMacHTInfoField3 {
-#ifndef ANI_LITTLE_BIT_ENDIAN
-	uint16_t reserved:4;
-	uint16_t pcoPhase:1;    /* Dynamic state */
-	uint16_t pcoActive:1;   /* Dynamic state */
-	uint16_t lsigTXOPProtectionFullSupport:1;       /* Dynamic state */
-	uint16_t secondaryBeacon:1;     /* Dynamic state */
-	uint16_t dualCTSProtection:1;   /* Dynamic state */
-	uint16_t basicSTBCMCS:7;        /* Dynamic state */
-#else
-	uint16_t basicSTBCMCS:7;
-	uint16_t dualCTSProtection:1;
-	uint16_t secondaryBeacon:1;
-	uint16_t lsigTXOPProtectionFullSupport:1;
-	uint16_t pcoActive:1;
-	uint16_t pcoPhase:1;
-	uint16_t reserved:4;
-#endif
-} qdf_packed tSirMacHTInfoField3;
 
 typedef struct sSirMacProbeReqFrame {
 	tSirMacSSidIE ssIdIE;
@@ -2136,6 +1945,343 @@ typedef struct sSirMacRadioMeasureReport {
 	} report;
 
 } tSirMacRadioMeasureReport, *tpSirMacRadioMeasureReport;
+
+#ifdef WLAN_FEATURE_11AX
+struct he_cap_network_endian {
+	uint32_t htc_he:1;
+	uint32_t twt_request:1;
+	uint32_t twt_responder:1;
+	uint32_t fragmentation:2;
+	uint32_t max_num_frag_msdu_amsdu_exp:3;
+	uint32_t min_frag_size:2;
+	uint32_t trigger_frm_mac_pad:2;
+	uint32_t multi_tid_aggr_rx_supp:3;
+	uint32_t he_link_adaptation:2;
+	uint32_t all_ack:1;
+	uint32_t trigd_rsp_sched:1;
+	uint32_t a_bsr:1;
+	uint32_t broadcast_twt:1;
+	uint32_t ba_32bit_bitmap:1;
+	uint32_t mu_cascade:1;
+	uint32_t ack_enabled_multitid:1;
+	uint32_t reserved:1;
+	uint32_t omi_a_ctrl:1;
+	uint32_t ofdma_ra:1;
+	uint32_t max_ampdu_len_exp_ext:2;
+	uint32_t amsdu_frag:1;
+	uint32_t flex_twt_sched:1;
+	uint32_t rx_ctrl_frame:1;
+
+	uint16_t bsrp_ampdu_aggr:1;
+	uint16_t qtp:1;
+	uint16_t a_bqr:1;
+	uint16_t spatial_reuse_param_rspder:1;
+	uint16_t ndp_feedback_supp:1;
+	uint16_t ops_supp:1;
+	uint16_t amsdu_in_ampdu:1;
+	uint16_t multi_tid_aggr_tx_supp:3;
+	uint16_t he_sub_ch_sel_tx_supp:1;
+	uint16_t ul_2x996_tone_ru_supp:1;
+	uint16_t om_ctrl_ul_mu_data_dis_rx:1;
+	uint16_t reserved1:3;
+
+	uint32_t reserved2:1;
+	uint32_t chan_width:7;
+	uint32_t rx_pream_puncturing:4;
+	uint32_t device_class:1;
+	uint32_t ldpc_coding:1;
+	uint32_t he_1x_ltf_800_gi_ppdu:1;
+	uint32_t midamble_tx_rx_max_nsts:2;
+	uint32_t he_4x_ltf_3200_gi_ndp:1;
+	uint32_t tx_stbc_lt_80mhz:1;
+	uint32_t rx_stbc_lt_80mhz:1;
+	uint32_t doppler:2;
+	uint32_t ul_mu:2;
+	uint32_t dcm_enc_tx:3;
+	uint32_t dcm_enc_rx:3;
+	uint32_t ul_he_mu:1;
+	uint32_t su_beamformer:1;
+
+	uint32_t su_beamformee:1;
+	uint32_t mu_beamformer:1;
+	uint32_t bfee_sts_lt_80:3;
+	uint32_t bfee_sts_gt_80:3;
+	uint32_t num_sounding_lt_80:3;
+	uint32_t num_sounding_gt_80:3;
+	uint32_t su_feedback_tone16:1;
+	uint32_t mu_feedback_tone16:1;
+	uint32_t codebook_su:1;
+	uint32_t codebook_mu:1;
+	uint32_t beamforming_feedback:3;
+	uint32_t he_er_su_ppdu:1;
+	uint32_t dl_mu_mimo_part_bw:1;
+	uint32_t ppet_present:1;
+	uint32_t srp:1;
+	uint32_t power_boost:1;
+	uint32_t he_ltf_800_gi_4x:1;
+	uint32_t max_nc:3;
+	uint32_t tx_stbc_gt_80mhz:1;
+	uint32_t rx_stbc_gt_80mhz:1;
+
+	uint16_t er_he_ltf_800_gi_4x:1;
+	uint16_t he_ppdu_20_in_40Mhz_2G:1;
+	uint16_t he_ppdu_20_in_160_80p80Mhz:1;
+	uint16_t he_ppdu_80_in_160_80p80Mhz:1;
+	uint16_t er_1x_he_ltf_gi:1;
+	uint16_t midamble_tx_rx_1x_he_ltf:1;
+	uint16_t dcm_max_bw:2;
+	uint16_t longer_than_16_he_sigb_ofdm_sym:1;
+	uint16_t non_trig_cqi_feedback:1;
+	uint16_t tx_1024_qam_lt_242_tone_ru:1;
+	uint16_t rx_1024_qam_lt_242_tone_ru:1;
+	uint16_t rx_full_bw_su_he_mu_compress_sigb:1;
+	uint16_t rx_full_bw_su_he_mu_non_cmpr_sigb:1;
+	uint16_t reserved3:2;
+
+	uint8_t  reserved4;
+
+	uint16_t rx_he_mcs_map_lt_80;
+	uint16_t tx_he_mcs_map_lt_80;
+	uint16_t rx_he_mcs_map_160;
+	uint16_t tx_he_mcs_map_160;
+	uint16_t rx_he_mcs_map_80_80;
+	uint16_t tx_he_mcs_map_80_80;
+} qdf_packed;
+
+struct he_ops_network_endian {
+	uint32_t            bss_color:6;
+	uint32_t           default_pe:3;
+	uint32_t         twt_required:1;
+	uint32_t        txop_rts_threshold:10;
+	uint32_t      partial_bss_col:1;
+	uint32_t     vht_oper_present:1;
+	uint32_t            reserved1:6;
+	uint32_t            co_located_bss:1;
+	uint32_t     bss_col_disabled:1;
+	uint32_t            reserved2:1;
+	uint8_t             basic_mcs_nss[2];
+	union {
+		struct {
+			uint8_t chan_width;
+			uint8_t center_freq_seg0;
+			uint8_t center_freq_seg1;
+		} info; /* vht_oper_present = 1 */
+	} vht_oper;
+	union {
+		struct {
+			uint8_t data;
+		} info; /* co_located_bss = 1 */
+	} maxbssid_ind;
+} qdf_packed;
+
+/* HE Capabilities Info */
+struct he_capability_info {
+#ifndef ANI_LITTLE_BIT_ENDIAN
+	uint32_t rx_ctrl_frame:1;
+	uint32_t flex_twt_sched:1;
+	uint32_t amsdu_frag:1;
+	uint32_t max_ampdu_len_exp_ext:2;
+	uint32_t ofdma_ra:1;
+	uint32_t omi_a_ctrl:1;
+	uint32_t reserved:1;
+	uint32_t ack_enabled_multitid:1;
+	uint32_t mu_cascade:1;
+	uint32_t ba_32bit_bitmap:1;
+	uint32_t broadcast_twt:1;
+	uint32_t a_bsr:1;
+	uint32_t trigd_rsp_sched:1;
+	uint32_t all_ack:1;
+	uint32_t he_link_adaptation:2;
+	uint32_t multi_tid_aggr_rx_supp:3;
+	uint32_t trigger_frm_mac_pad:2;
+	uint32_t min_frag_size:2;
+	uint32_t max_num_frag_msdu_amsdu_exp:3;
+	uint32_t fragmentation:2;
+	uint32_t twt_responder:1;
+	uint32_t twt_request:1;
+	uint32_t htc_he:1;
+
+	uint16_t reserved1:3;
+	uint16_t om_ctrl_ul_mu_data_dis_rx:1;
+	uint16_t ul_2x996_tone_ru_supp:1;
+	uint16_t he_sub_ch_sel_tx_supp:1;
+	uint16_t multi_tid_aggr_tx_supp:3;
+	uint16_t amsdu_in_ampdu:1;
+	uint16_t ops_supp:1;
+	uint16_t ndp_feedback_supp:1;
+	uint16_t spatial_reuse_param_rspder:1;
+	uint16_t a_bqr:1;
+	uint16_t qtp:1;
+	uint16_t bsrp_ampdu_aggr:1;
+
+	uint32_t su_beamformer:1;
+	uint32_t ul_he_mu:1;
+	uint32_t dcm_enc_rx:3;
+	uint32_t dcm_enc_tx:3;
+	uint32_t ul_mu:2;
+	uint32_t doppler:2;
+	uint32_t rx_stbc_lt_80mhz:1;
+	uint32_t tx_stbc_lt_80mhz:1;
+	uint32_t he_4x_ltf_3200_gi_ndp:1;
+	uint32_t midamble_tx_rx_max_nsts:2;
+	uint32_t he_1x_ltf_800_gi_ppdu:1;
+	uint32_t ldpc_coding:1;
+	uint32_t device_class:1;
+	uint32_t rx_pream_puncturing:4;
+	uint32_t chan_width:7;
+	uint32_t reserved2:1;
+
+	uint32_t rx_stbc_gt_80mhz:1;
+	uint32_t tx_stbc_gt_80mhz:1;
+	uint32_t max_nc:3;
+	uint32_t he_ltf_800_gi_4x:1;
+	uint32_t power_boost:1;
+	uint32_t srp:1;
+	uint32_t ppet_present:1;
+	uint32_t dl_mu_mimo_part_bw:1;
+	uint32_t he_er_su_ppdu:1;
+	uint32_t beamforming_feedback:3;
+	uint32_t codebook_mu:1;
+	uint32_t codebook_su:1;
+	uint32_t mu_feedback_tone16:1;
+	uint32_t su_feedback_tone16:1;
+	uint32_t num_sounding_gt_80:3;
+	uint32_t num_sounding_lt_80:3;
+	uint32_t bfee_sts_gt_80:3;
+	uint32_t bfee_sts_lt_80:3;
+	uint32_t mu_beamformer:1;
+	uint32_t su_beamformee:1;
+
+	uint16_t reserved3:2;
+	uint16_t rx_full_bw_su_he_mu_non_cmpr_sigb:1;
+	uint16_t rx_full_bw_su_he_mu_compress_sigb:1;
+	uint16_t rx_1024_qam_lt_242_tone_ru:1;
+	uint16_t tx_1024_qam_lt_242_tone_ru:1;
+	uint16_t non_trig_cqi_feedback:1;
+	uint16_t longer_than_16_he_sigb_ofdm_sym:1;
+	uint16_t dcm_max_bw:2;
+	uint16_t midamble_tx_rx_1x_he_ltf:1;
+	uint16_t er_1x_he_ltf_gi:1;
+	uint16_t he_ppdu_80_in_160_80p80Mhz:1;
+	uint16_t he_ppdu_20_in_160_80p80Mhz:1;
+	uint16_t he_ppdu_20_in_40Mhz_2G:1;
+	uint16_t er_he_ltf_800_gi_4x:1;
+
+	uint8_t reserved4;
+
+	uint16_t tx_he_mcs_map_80_80;
+	uint16_t rx_he_mcs_map_80_80;
+	uint16_t tx_he_mcs_map_160;
+	uint16_t rx_he_mcs_map_160;
+	uint16_t tx_he_mcs_map_lt_80;
+	uint16_t rx_he_mcs_map_lt_80;
+#else
+	uint32_t htc_he:1;
+	uint32_t twt_request:1;
+	uint32_t twt_responder:1;
+	uint32_t fragmentation:2;
+	uint32_t max_num_frag_msdu_amsdu_exp:3;
+	uint32_t min_frag_size:2;
+	uint32_t trigger_frm_mac_pad:2;
+	uint32_t multi_tid_aggr_rx_supp:3;
+	uint32_t he_link_adaptation:2;
+	uint32_t all_ack:1;
+	uint32_t trigd_rsp_sched:1;
+	uint32_t a_bsr:1;
+	uint32_t broadcast_twt:1;
+	uint32_t ba_32bit_bitmap:1;
+	uint32_t mu_cascade:1;
+	uint32_t ack_enabled_multitid:1;
+	uint32_t reserved:1;
+	uint32_t omi_a_ctrl:1;
+	uint32_t ofdma_ra:1;
+	uint32_t max_ampdu_len_exp_ext:2;
+	uint32_t amsdu_frag:1;
+	uint32_t flex_twt_sched:1;
+	uint32_t rx_ctrl_frame:1;
+
+	uint16_t bsrp_ampdu_aggr:1;
+	uint16_t qtp:1;
+	uint16_t a_bqr:1;
+	uint16_t spatial_reuse_param_rspder:1;
+	uint16_t ndp_feedback_supp:1;
+	uint16_t ops_supp:1;
+	uint16_t amsdu_in_ampdu:1;
+	uint16_t multi_tid_aggr_tx_supp:3;
+	uint16_t he_sub_ch_sel_tx_supp:1;
+	uint16_t ul_2x996_tone_ru_supp:1;
+	uint16_t om_ctrl_ul_mu_data_dis_rx:1;
+	uint16_t reserved1:3;
+
+	uint32_t reserved2:1;
+	uint32_t chan_width:7;
+	uint32_t rx_pream_puncturing:4;
+	uint32_t device_class:1;
+	uint32_t ldpc_coding:1;
+	uint32_t he_1x_ltf_800_gi_ppdu:1;
+	uint32_t midamble_tx_rx_max_nsts:2;
+	uint32_t he_4x_ltf_3200_gi_ndp:1;
+	uint32_t tx_stbc_lt_80mhz:1;
+	uint32_t rx_stbc_lt_80mhz:1;
+	uint32_t doppler:2;
+	uint32_t ul_mu:2;
+	uint32_t dcm_enc_tx:3;
+	uint32_t dcm_enc_rx:3;
+	uint32_t ul_he_mu:1;
+	uint32_t su_beamformer:1;
+
+	uint32_t su_beamformee:1;
+	uint32_t mu_beamformer:1;
+	uint32_t bfee_sts_lt_80:3;
+	uint32_t bfee_sts_gt_80:3;
+	uint32_t num_sounding_lt_80:3;
+	uint32_t num_sounding_gt_80:3;
+	uint32_t su_feedback_tone16:1;
+	uint32_t mu_feedback_tone16:1;
+	uint32_t codebook_su:1;
+	uint32_t codebook_mu:1;
+	uint32_t beamforming_feedback:3;
+	uint32_t he_er_su_ppdu:1;
+	uint32_t dl_mu_mimo_part_bw:1;
+	uint32_t ppet_present:1;
+	uint32_t srp:1;
+	uint32_t power_boost:1;
+	uint32_t he_ltf_800_gi_4x:1;
+	uint32_t max_nc:3;
+	uint32_t tx_stbc_gt_80mhz:1;
+	uint32_t rx_stbc_gt_80mhz:1;
+
+	uint16_t er_he_ltf_800_gi_4x:1;
+	uint16_t he_ppdu_20_in_40Mhz_2G:1;
+	uint16_t he_ppdu_20_in_160_80p80Mhz:1;
+	uint16_t he_ppdu_80_in_160_80p80Mhz:1;
+	uint16_t er_1x_he_ltf_gi:1;
+	uint16_t midamble_tx_rx_1x_he_ltf:1;
+	uint16_t dcm_max_bw:2;
+	uint16_t longer_than_16_he_sigb_ofdm_sym:1;
+	uint16_t non_trig_cqi_feedback:1;
+	uint16_t tx_1024_qam_lt_242_tone_ru:1;
+	uint16_t rx_1024_qam_lt_242_tone_ru:1;
+	uint16_t rx_full_bw_su_he_mu_compress_sigb:1;
+	uint16_t rx_full_bw_su_he_mu_non_cmpr_sigb:1;
+	uint16_t reserved3:2;
+
+	uint8_t  reserved4;
+
+	uint16_t rx_he_mcs_map_lt_80;
+	uint16_t tx_he_mcs_map_lt_80;
+	uint16_t rx_he_mcs_map_160;
+	uint16_t tx_he_mcs_map_160;
+	uint16_t rx_he_mcs_map_80_80;
+	uint16_t tx_he_mcs_map_80_80;
+#endif
+} qdf_packed;
+#endif
+
+/*
+ * frame parser does not include optional 160 and 80+80 mcs set for MIN IE len
+ */
+#define SIR_MAC_HE_CAP_MIN_LEN       (DOT11F_IE_HE_CAP_MIN_LEN + 8)
 
 /* QOS action frame definitions */
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2018 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -96,21 +96,21 @@ typedef struct TX_TIMER_STRUCT {
 #define TIMER_MAX_NAME_LEN 50
 	char timerName[TIMER_MAX_NAME_LEN];
 #endif
+	uint8_t sessionId;
+	uint32_t expireInput;
 	uint64_t tmrSignature;
 	void (*pExpireFunc)(void *, uint32_t);
-	uint32_t expireInput;
 	uint64_t initScheduleTimeInMsecs;
 	uint64_t rescheduleTimeInMsecs;
 	qdf_mc_timer_t qdf_timer;
 
 	/* Pointer to the MAC global structure, which stores the context for the NIC, */
 	/* for which this timer is supposed to operate. */
-	void *pMac;
-	uint8_t sessionId;
+	void *mac;
 
 } TX_TIMER;
 
-#define TX_TIMER_VALID(timer) (timer.pMac != 0)
+#define TX_TIMER_VALID(timer) (timer.mac != 0)
 
 extern uint64_t tx_time_get(void);
 extern uint32_t tx_timer_activate(TX_TIMER *);

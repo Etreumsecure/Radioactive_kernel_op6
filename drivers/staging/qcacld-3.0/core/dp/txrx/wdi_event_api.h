@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, 2017 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014, 2017-2018 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -20,9 +20,10 @@
 #define _WDI_EVENT_API_H_
 
 #include "wdi_event.h"
-
+#include <cdp_txrx_handle.h>
 struct ol_txrx_pdev_t;
 
+#ifdef WDI_EVENT_ENABLE
 /**
  * @brief Subscribe to a specified WDI event.
  * @details
@@ -38,9 +39,9 @@ struct ol_txrx_pdev_t;
  * @param event - which event's notifications are being subscribed to
  * @return error code, or A_OK for success
  */
-A_STATUS wdi_event_sub(struct ol_txrx_pdev_t *txrx_pdev,
-		       wdi_event_subscribe *event_cb_sub,
-		       enum WDI_EVENT event);
+A_STATUS wdi_event_sub(struct cdp_pdev *ppdev,
+		       void *event_cb_sub,
+		       uint32_t event);
 
 /**
  * @brief Unsubscribe from a specified WDI event.
@@ -55,28 +56,42 @@ A_STATUS wdi_event_sub(struct ol_txrx_pdev_t *txrx_pdev,
  * @param event - which event is being unsubscribed
  * @return error code, or A_OK for success
  */
-A_STATUS wdi_event_unsub(struct ol_txrx_pdev_t *txrx_pdev,
-			 wdi_event_subscribe *event_cb_sub,
-			 enum WDI_EVENT event);
+A_STATUS wdi_event_unsub(struct cdp_pdev *ppdev,
+			 void *event_cb_sub,
+			 uint32_t event);
 
-#ifdef WDI_EVENT_ENABLE
 
 void wdi_event_handler(enum WDI_EVENT event,
-		       struct ol_txrx_pdev_t *txrx_pdev, void *data);
+		       struct cdp_pdev *txrx_pdev, void *data);
 A_STATUS wdi_event_attach(struct ol_txrx_pdev_t *txrx_pdev);
 A_STATUS wdi_event_detach(struct ol_txrx_pdev_t *txrx_pdev);
 
 #else
 
 static inline void wdi_event_handler(enum WDI_EVENT event,
-		       struct ol_txrx_pdev_t *txrx_pdev, void *data)
+		       struct cdp_pdev *txrx_pdev, void *data)
 {
 }
+
 static inline A_STATUS wdi_event_attach(struct ol_txrx_pdev_t *txrx_pdev)
 {
 	return A_OK;
 }
+
 static inline A_STATUS wdi_event_detach(struct ol_txrx_pdev_t *txrx_pdev)
+{
+	return A_OK;
+}
+
+static inline A_STATUS wdi_event_sub(struct cdp_pdev *ppdev, void *event_cb_sub,
+				     uint32_t event)
+{
+	return A_OK;
+}
+
+static inline A_STATUS wdi_event_unsub(struct cdp_pdev *ppdev,
+				       void *event_cb_sub,
+				       uint32_t event)
 {
 	return A_OK;
 }
