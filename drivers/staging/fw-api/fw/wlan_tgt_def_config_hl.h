@@ -169,13 +169,22 @@
 #define CFG_TGT_DEFAULT_BMISS_OFFLOAD_MAX_VDEV   0x2
 
 /* maximum number of VDEV offload Roaming to support */
+#ifndef CFG_TGT_DEFAULT_ROAM_OFFLOAD_MAX_VDEV
 #define CFG_TGT_DEFAULT_ROAM_OFFLOAD_MAX_VDEV   0x2
+#endif
+
+/* maximum number of STA VDEVs */
+#ifndef CFG_TGT_DEFAULT_MAX_STA_VDEVS
+#define CFG_TGT_DEFAULT_MAX_STA_VDEVS 0
+#endif
 
 /* maximum number of AP profiles pushed to offload Roaming */
 #define CFG_TGT_DEFAULT_ROAM_OFFLOAD_MAX_PROFILES   0x8
 
 /* maximum number of VDEV offload GTK to support */
+#ifndef CFG_TGT_DEFAULT_GTK_OFFLOAD_MAX_VDEV
 #define CFG_TGT_DEFAULT_GTK_OFFLOAD_MAX_VDEV   0x2
+#endif
 /* default: mcast->ucast disabled */
 
 #define CFG_TGT_DEFAULT_NUM_MCAST_GROUPS 0
@@ -221,7 +230,9 @@
 /*
  * number of peers that each Tdls vdev can track
  */
+#ifndef CFG_TGT_NUM_TDLS_CONN_TABLE_ENTRIES
 #define CFG_TGT_NUM_TDLS_CONN_TABLE_ENTRIES   8
+#endif
 /*
  * number of TDLS concurrent sleep STAs
  */
@@ -233,14 +244,18 @@
 #define CFG_TGT_NUM_TDLS_CONC_BUFFER_STAS    1
 
 #define CFG_TGT_MAX_MULTICAST_FILTER_ENTRIES 16
+
 /*
  * Maximum number of VDEV that beacon tx offload will support
  */
+#ifndef CFG_TGT_DEFAULT_BEACON_TX_OFFLOAD_MAX_VDEV
+/* For Naples/Rome/Tufello */
 #ifdef HIF_SDIO
 #define CFG_TGT_DEFAULT_BEACON_TX_OFFLOAD_MAX_VDEV 2
 #else
 #define CFG_TGT_DEFAULT_BEACON_TX_OFFLOAD_MAX_VDEV 1
 #endif
+#endif /* CFG_TGT_DEFAULT_BEACON_TX_OFFLOAD_MAX_VDEV */
 
 /*
  * ht enable highest MCS by default
